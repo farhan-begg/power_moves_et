@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import cors from "cors"; // ✅ Import cors
 import transactionRoutes from "./routes/transactionRoutes";
 import plaidRoutes from "./routes/plaidRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -14,6 +15,13 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json()); // Parse JSON
 app.use(express.urlencoded({ extended: true })); // Parse form-urlencoded
 
+// ✅ Enable CORS for frontend
+app.use(cors({
+  origin: "http://localhost:3000",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
 // Debugging (safe: logs parsed body, not raw stream)
 app.use((req, res, next) => {
   console.log("📝 Request:", req.method, req.url);

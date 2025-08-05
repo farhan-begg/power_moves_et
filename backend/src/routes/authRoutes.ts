@@ -18,11 +18,19 @@ router.post("/register", async (req, res) => {
     const user = new User({ name, email, password });
     await user.save();
 
-    res.status(201).json({ message: "User registered successfully" });
-  } catch (err: any) {
-    res.status(500).json({ error: "Registration failed", details: err.message });
+    // ✅ Generate JWT after registration
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1d" });
+
+    res.status(201).json({
+      token,
+      user: { id: user._id, name: user.name, email: user.email },
+    });
+  } catch (err) {
+    console.error("❌ Registration error:", err);
+    res.status(500).json({ error: "Registration failed" });
   }
 });
+
 
 // Login with auto Plaid sync
 router.post("/login", async (req, res) => {

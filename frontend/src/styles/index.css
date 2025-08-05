@@ -1,0 +1,26 @@
+/* src/theme/theme.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@theme {
+  --color-bg: var(--user-bg, #f9fafb);
+  --color-text: var(--user-text, #111827);
+  --color-primary: var(--user-primary, #3b82f6);
+  --color-card: var(--user-card, #ffffff);
+}
+
+:root {
+  --user-bg: #f9fafb;
+  --user-text: #111827;
+  --user-primary: #3b82f6;
+  --user-card: #ffffff;
+}
+
+/* Example of dark theme (later users can switch this dynamically) */
+[data-theme="dark"] {
+  --user-bg: #1f2937;
+  --user-text: #f9fafb;
+  --user-primary: #6366f1;
+  --user-card: #374151;
+}
