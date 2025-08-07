@@ -8,6 +8,7 @@ import Transaction from "../models/Transaction";
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 
+console.log("🔐 Using JWT_SECRET:", JWT_SECRET);
 // Register
 router.post("/register", async (req, res) => {
   try {

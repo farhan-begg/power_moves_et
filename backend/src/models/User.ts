@@ -13,11 +13,11 @@ const UserSchema: Schema<IUser> = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  plaidAccessToken: {
-    content: { type: String },
-    iv: { type: String },
-    tag: { type: String }
-  }
+plaidAccessToken: {
+  type: mongoose.Schema.Types.Mixed,
+  default: null
+}
+
 }, { timestamps: true });
 
 // Hash password before saving

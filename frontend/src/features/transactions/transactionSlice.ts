@@ -1,4 +1,16 @@
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import { fetchTransactions } from "../../api/transaction";
+import { RootState } from "../../app/store";
+
+interface Transaction {
+  _id: string;
+  type: "income" | "expense";
+  category: string;
+  amount: number;
+  date: string;
+  description?: string;
+  source: "manual" | "plaid";
+}
 
 interface TransactionFilters {
   type?: "income" | "expense";
@@ -9,15 +21,44 @@ interface TransactionFilters {
 }
 
 interface TransactionState {
+  transactions: Transaction[];
+  loading: boolean;
+  error: string | null;
   filters: TransactionFilters;
+  total: number;
+  pages: number;
 }
 
 const initialState: TransactionState = {
+  transactions: [],
+  loading: false,
+  error: null,
   filters: {
     page: 1,
     limit: 10,
   },
+  total: 0,
+  pages: 0,
 };
+
+// ✅ Async thunk with filters
+export const loadTransactions = createAsyncThunk(
+  "transactions/load",
+  async (args: { token: string }, thunkAPI) => {
+    try {
+      const state = thunkAPI.getState() as RootState;
+      const { filters } = state.transactions;
+      const data = await fetchTransactions(
+        args.token,
+        filters.page,
+        filters.limit
+      );
+      return data;
+    } catch (err: any) {
+      return thunkAPI.rejectWithValue(err.response?.data?.error || "Failed to fetch transactions");
+    }
+  }
+);
 
 const transactionSlice = createSlice({
   name: "transactions",
@@ -29,6 +70,23 @@ const transactionSlice = createSlice({
     resetFilters: (state) => {
       state.filters = { page: 1, limit: 10 };
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(loadTransactions.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(loadTransactions.fulfilled, (state, action: PayloadAction<any>) => {
+        state.loading = false;
+        state.transactions = action.payload.transactions;
+        state.total = action.payload.total;
+        state.pages = action.payload.pages;
+      })
+      .addCase(loadTransactions.rejected, (state, action: PayloadAction<any>) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
   },
 });
 

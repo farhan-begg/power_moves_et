@@ -9,7 +9,53 @@ import { Products, CountryCode } from "plaid";
 
 const router = Router();
 
-// Create Plaid link token
+// ---------------------------
+// NEW: Link Token Route
+// ---------------------------
+router.get("/link-token", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const response = await plaidClient.linkTokenCreate({
+      user: { client_user_id: req.user! },
+      client_name: "Expense Tracker",
+      products: [Products.Transactions],
+      country_codes: [CountryCode.Us],
+      language: "en",
+    });
+
+    res.json({ link_token: response.data.link_token });
+  } catch (err) {
+    console.error("❌ Plaid link-token error:", err);
+    res.status(500).json({ error: "Failed to create link token" });
+  }
+});
+
+// ---------------------------
+// NEW: Exchange Public Token
+// ---------------------------
+router.post("/exchange-token", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const { public_token } = req.body;
+    if (!public_token) {
+      return res.status(400).json({ error: "public_token is required" });
+    }
+
+    const response = await plaidClient.itemPublicTokenExchange({ public_token });
+    const accessToken = response.data.access_token;
+    const encryptedToken = encrypt(accessToken);
+
+    await User.findByIdAndUpdate(req.user, { plaidAccessToken: encryptedToken });
+
+    res.json({ message: "Plaid account linked successfully" });
+  } catch (err: any) {
+    console.error("❌ Exchange token error:", err.message || err);
+    res.status(500).json({ error: "Failed to exchange token" });
+  }
+  
+});
+
+// ---------------------------
+// Existing: Create Link Token
+// ---------------------------
 router.post("/create_link_token", protect, async (req: AuthRequest, res: Response) => {
   try {
     const response = await plaidClient.linkTokenCreate({
@@ -17,7 +63,7 @@ router.post("/create_link_token", protect, async (req: AuthRequest, res: Respons
       client_name: "Expense Tracker",
       products: [Products.Transactions],
       country_codes: [CountryCode.Us],
-      language: "en"
+      language: "en",
     });
 
     res.json({ link_token: response.data.link_token });
@@ -27,13 +73,20 @@ router.post("/create_link_token", protect, async (req: AuthRequest, res: Respons
   }
 });
 
-// Exchange public_token for access_token
+// ---------------------------
+// Existing: Exchange Public Token
+// ---------------------------
 router.post("/exchange_public_token", protect, async (req: AuthRequest, res: Response) => {
   try {
     const { public_token } = req.body;
     if (!public_token) {
       return res.status(400).json({ error: "public_token is required" });
     }
+
+
+    console.log("🔁 Received public_token:", public_token);
+
+
 
     const response = await plaidClient.itemPublicTokenExchange({ public_token });
     const encryptedToken = encrypt(response.data.access_token);
@@ -47,7 +100,9 @@ router.post("/exchange_public_token", protect, async (req: AuthRequest, res: Res
   }
 });
 
-// Fetch Plaid transactions, sync with Mongo, and return all
+// ---------------------------
+// Existing: Fetch and Sync Transactions
+// ---------------------------
 router.get("/transactions", protect, async (req: AuthRequest, res: Response) => {
   try {
     const user = await User.findById(req.user);
@@ -68,11 +123,8 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     });
 
     const plaidTransactions = plaidResponse.data.transactions;
-
-    // Convert req.user to ObjectId for consistency
     const userId = new mongoose.Types.ObjectId(req.user);
 
-    // Map Plaid data into Mongo schema
     const formattedTransactions = plaidTransactions.map((txn) => ({
       userId,
       type: txn.amount >= 0 ? "expense" : "income",
@@ -80,10 +132,9 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
       amount: Math.abs(txn.amount),
       date: new Date(txn.date),
       description: txn.name,
-      source: "plaid"
+      source: "plaid",
     }));
 
-    // Upsert (insert if not exists)
     for (const txn of formattedTransactions) {
       await Transaction.updateOne(
         {
@@ -97,7 +148,6 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
       );
     }
 
-    // Return combined transactions
     const allTransactions = await Transaction.find({ userId }).sort({ date: -1 });
     res.json(allTransactions);
   } catch (err: any) {
@@ -105,5 +155,18 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     res.status(500).json({ error: "Failed to fetch Plaid transactions", details: err.message });
   }
 });
+
+
+router.get("/accounts", protect, async (req: AuthRequest, res: Response) => {
+  const user = await User.findById(req.user);
+  if (!user?.plaidAccessToken) return res.status(400).json({ error: "No access token" });
+
+  const accessToken = decrypt(user.plaidAccessToken);
+
+  const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
+
+  res.json(accountsResponse.data.accounts);
+});
+
 
 export default router;

@@ -1,19 +1,25 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload as DefaultJwtPayload } from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+import dotenv from "dotenv";
+dotenv.config(); // 🟢 MUST be called before using process.env
 
-// Extend Request type
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("❌ JWT_SECRET is not defined in environment variables");
+}
+
+const JWT_SECRET = process.env.JWT_SECRET as string;
+
 export interface AuthRequest extends Request {
   user?: string;
 }
 
-interface JwtPayload {
+interface JwtPayload extends DefaultJwtPayload {
   id: string;
 }
 
 export const protect = (req: AuthRequest, res: Response, next: NextFunction) => {
-  // Get token from headers
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     console.warn("❌ No Authorization header provided");
@@ -24,15 +30,17 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction) => 
   console.log("➡️ Incoming token:", token);
 
   try {
-    // Verify token
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    console.log("✅ Decoded JWT:", decoded);
 
-    // Attach user ID from token
+    if (!decoded || typeof decoded !== "object" || !("id" in decoded)) {
+      throw new Error("Invalid token payload structure");
+    }
+
+    console.log("✅ Decoded JWT:", decoded);
     req.user = decoded.id;
     next();
   } catch (err: any) {
-    console.error("❌ JWT verification failed:", err.message || err);
-    return res.status(401).json({ error: "Token invalid" });
+    console.error("❌ JWT verification failed:", err.message);
+    return res.status(401).json({ error: "Token invalid", details: err.message });
   }
 };
