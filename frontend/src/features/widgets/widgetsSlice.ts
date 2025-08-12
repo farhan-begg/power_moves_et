@@ -1,6 +1,13 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-export type WidgetType = "plaid-connect" | "quick-stats";
+export type WidgetType =
+  | "plaid-connect"
+  | "stat-today"
+  | "stat-month"
+  | "stat-year"
+  | "income-expense-chart"
+  | "bank-flow"
+  | "transactions-list";
 
 export interface Widget {
   id: string;
@@ -13,19 +20,26 @@ interface WidgetsState {
   byId: Record<string, Widget>;
 }
 
-const genId = () => (globalThis.crypto?.randomUUID?.() ?? `w_${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
+const genId = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `w_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const initial: WidgetsState = {
-  order: ["w1", "w2"],
+const initialState: WidgetsState = {
   byId: {
-    w1: { id: "w1", type: "plaid-connect", title: "Connect Bank" },
-    w2: { id: "w2", type: "quick-stats",   title: "Quick Stats"  },
+    w1: { id: "w1", type: "plaid-connect", title: "Connect your bank" },
+    w2: { id: "w2", type: "stat-today", title: "Today" },
+    w3: { id: "w3", type: "stat-month", title: "This Month" },
+    w4: { id: "w4", type: "stat-year", title: "Year to Date" },
+    w5: { id: "w5", type: "income-expense-chart", title: "Income vs Expense" },
+    w6: { id: "w6", type: "bank-flow", title: "Bank Flow" },
+       "w7": { id: "w7", type: "transactions-list",   title: "Recent Spending" }, // 
   },
+  order: ["w1", "w2", "w3", "w4", "w5", "w6", "w7"],
 };
 
 const widgetsSlice = createSlice({
   name: "widgets",
-  initialState: initial,
+  initialState,
   reducers: {
     reorder: (state, action: PayloadAction<{ activeId: string; overId: string }>) => {
       const { activeId, overId } = action.payload;
@@ -42,7 +56,7 @@ const widgetsSlice = createSlice({
     },
     addWidget: (state, action: PayloadAction<{ type: WidgetType; title?: string }>) => {
       const id = genId();
-      const title = action.payload.title ?? (action.payload.type === "plaid-connect" ? "Connect Bank" : "Quick Stats");
+      const title = action.payload.title ?? action.payload.type;
       state.byId[id] = { id, type: action.payload.type, title };
       state.order.push(id);
     },

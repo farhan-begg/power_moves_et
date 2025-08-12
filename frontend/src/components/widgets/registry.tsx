@@ -1,23 +1,15 @@
-// src/components/widgets/registry.tsx
 import React from "react";
 import PlaidLinkButton from "../PlaidLinkButton";
 import { useQuickStats } from "../../hooks/useQuickStats";
 import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
-  BanknotesIcon,
 } from "@heroicons/react/24/outline";
+import IncomeExpenseChartWidget from "./IncomeExpenseChartWidget";
+import BankFlowWidget from "./BankFlowWidget"; // <-- add
+import TransactionsListWidget from "./TransactionsListWidget";
 
-export function PlaidConnectWidget() {
-  return (
-    <div className="space-y-3">
-      <p className="text-white/80">
-        Connect your bank via Plaid to sync transactions.
-      </p>
-      <PlaidLinkButton />
-    </div>
-  );
-}
+/* ---------- Shared bits ---------- */
 
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -33,9 +25,7 @@ function NetIcon({ value }: { value: number }) {
     : "text-amber-300 bg-amber-300/10 ring-1 ring-amber-300/20";
 
   return (
-    <div
-      className={`h-9 w-9 rounded-full flex items-center justify-center ${color}`}
-    >
+    <div className={`h-9 w-9 rounded-full flex items-center justify-center ${color}`}>
       <Icon className="h-5 w-5" />
     </div>
   );
@@ -56,9 +46,7 @@ function Chip({
       : "text-rose-300 bg-rose-400/10 ring-rose-400/20";
 
   return (
-    <div
-      className={`px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${palette} flex items-center gap-1`}
-    >
+    <div className={`px-2.5 py-1 rounded-full text-xs font-medium ring-1 ${palette} flex items-center gap-1`}>
       <span
         className={`inline-block h-1.5 w-1.5 rounded-full ${
           color === "emerald" ? "bg-emerald-300" : "bg-rose-300"
@@ -92,7 +80,7 @@ function StatCard({
       </div>
 
       <div className={`mt-2 flex items-baseline gap-2 ${netColor}`}>
-        <div className="text-3xl font-semibold font-mono tabular-nums tracking-tight">
+        <div className="text-3xl font-semibold font-mono tabular-nums tracking-tight overflow-hidden text-ellipsis">
           {money(net)}
         </div>
       </div>
@@ -105,40 +93,47 @@ function StatCard({
   );
 }
 
-export function QuickStatsWidget() {
-  const { loading, error, today, month, year } = useQuickStats();
+/* ---------- Widgets ---------- */
 
-  if (loading) {
-    return (
-      <div className="rounded-2xl p-4 backdrop-blur-md bg-white/5 border border-white/10">
-        <div className="animate-pulse h-6 w-24 bg-white/10 rounded" />
-        <div className="mt-3 h-8 w-40 bg-white/10 rounded" />
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="rounded-2xl p-4 backdrop-blur-md bg-white/5 border border-rose-400/30">
-        <div className="text-rose-300 text-sm">Failed to load stats.</div>
-      </div>
-    );
-  }
-
+export function PlaidConnectWidget() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <StatCard label="Today Net" net={today.net} income={today.income} expense={today.expense} />
-      <StatCard
-        label="This Month Net"
-        net={month.net}
-        income={month.income}
-        expense={month.expense}
-      />
-      <StatCard label="YTD Net" net={year.net} income={year.income} expense={year.expense} />
+    <div className="space-y-3">
+      <p className="text-white/80">Connect your bank via Plaid to sync transactions.</p>
+      <PlaidLinkButton />
     </div>
   );
 }
 
+// Each of these loads once and shows just a single period:
+export function TodayStatWidget() {
+  const { loading, error, today } = useQuickStats();
+  if (loading) return <div className="h-28 rounded-2xl bg-white/5 animate-pulse" />;
+  if (error) return <div className="rounded-2xl p-4 bg-white/5 text-rose-300">Failed to load today.</div>;
+  return <StatCard label="Today Net" net={today.net} income={today.income} expense={today.expense} />;
+}
+
+export function MonthStatWidget() {
+  const { loading, error, month } = useQuickStats();
+  if (loading) return <div className="h-28 rounded-2xl bg-white/5 animate-pulse" />;
+  if (error) return <div className="rounded-2xl p-4 bg-white/5 text-rose-300">Failed to load month.</div>;
+  return (
+    <StatCard label="This Month Net" net={month.net} income={month.income} expense={month.expense} />
+  );
+}
+
+export function YearStatWidget() {
+  const { loading, error, year } = useQuickStats();
+  if (loading) return <div className="h-28 rounded-2xl bg-white/5 animate-pulse" />;
+  if (error) return <div className="rounded-2xl p-4 bg-white/5 text-rose-300">Failed to load YTD.</div>;
+  return <StatCard label="YTD Net" net={year.net} income={year.income} expense={year.expense} />;
+}
+
 export const widgetRenderer: Record<string, React.ComponentType<{}>> = {
   "plaid-connect": PlaidConnectWidget,
-  "quick-stats": QuickStatsWidget,
+  "stat-today": TodayStatWidget,
+  "stat-month": MonthStatWidget,
+  "stat-year": YearStatWidget,
+  "income-expense-chart": IncomeExpenseChartWidget,
+  "bank-flow": BankFlowWidget, // <-- add
+    "transactions-list": TransactionsListWidget, 
 };
