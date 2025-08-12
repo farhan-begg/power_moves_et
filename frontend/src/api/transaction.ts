@@ -1,5 +1,4 @@
-// src/api/transaction.ts
-import axios from "axios";
+import { http, auth } from "./http";
 
 /** ------------------ Types ------------------ */
 export type SourceType = "manual" | "plaid";
@@ -12,7 +11,7 @@ export interface Transaction {
   type: TxnType;
   category: string;
   amount: number;
-  date: string; // ISO string
+  date: string; // ISO
   description?: string;
   source: SourceType;
   createdAt: string;
@@ -59,77 +58,74 @@ export interface SummaryResponse {
   data: SummaryPoint[];
 }
 
-/** Axios helper */
-const authHeader = (token: string) => ({
-  headers: { Authorization: `Bearer ${token}` },
-});
-
 /** ------------------ Endpoints ------------------ */
 
-/** Get transactions (paged + filters) */
+// Get transactions (paged + filters)
 export const fetchTransactions = async (
   token: string,
-  params: { page?: number; limit?: number; type?: "income"|"expense"; category?: string; source?: "manual"|"plaid" } = {}
-) => {
-  const qs = new URLSearchParams(Object.entries(params).filter(([,v]) => v != null) as [string,string][]);
-  const url = qs.toString() ? `/api/transactions?${qs.toString()}` : "/api/transactions";
-  const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }});
-  return res.data;
+  params: TransactionsQuery = {}
+): Promise<PagedTransactionsResponse> => {
+  // Build clean querystring (no null/undefined)
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== null && v !== ""
+  ) as [string, string][];
+
+  const qs = new URLSearchParams(entries).toString();
+  const url = qs ? `/api/transactions?${qs}` : "/api/transactions";
+
+  const { data } = await http.get<PagedTransactionsResponse>(url, auth(token));
+  return data;
 };
-/** Add a transaction (manual) */
+
+// Add a transaction (manual)
 export const addTransaction = async (
   token: string,
-  data: Omit<Transaction, "_id" | "userId" | "createdAt" | "updatedAt" | "source"> & {
-    date?: string;
-  }
+  data: Omit<Transaction, "_id" | "userId" | "createdAt" | "updatedAt" | "source"> & { date?: string }
 ) => {
-  const res = await axios.post<Transaction>("/api/transactions", data, authHeader(token));
+  const res = await http.post<Transaction>("/api/transactions", data, auth(token));
   return res.data;
 };
 
-/** Update a transaction */
+// Update a transaction
 export const updateTransaction = async (
   token: string,
   id: string,
   data: Partial<Pick<Transaction, "type" | "category" | "amount" | "date" | "description">>
 ) => {
-  const res = await axios.put<Transaction>(`/api/transactions/${id}`, data, authHeader(token));
+  const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
   return res.data;
 };
 
-/** Delete a transaction */
+// Delete a transaction
 export const deleteTransaction = async (token: string, id: string) => {
-  const res = await axios.delete<{ message: string; id: string }>(
-    `/api/transactions/${id}`,
-    authHeader(token)
-  );
+  const res = await http.delete<{ message: string; id: string }>(`/api/transactions/${id}`, auth(token));
   return res.data;
 };
 
-/** Category stats (income vs expense per category) */
+// Category stats
 export const fetchCategoryStats = async (
   token: string,
   params: { startDate?: string; endDate?: string } = {},
   signal?: AbortSignal
 ): Promise<CategoryStatRow[]> => {
-  const res = await axios.get<CategoryStatRow[]>("/api/transactions/stats", {
-    ...authHeader(token),
+  const { data } = await http.get<CategoryStatRow[]>("/api/transactions/stats", {
+    ...auth(token),
     params,
     signal,
   });
-  return res.data;
+  return data;
 };
 
-/** Time-series summary (income/expense/net) */
+// Time-series summary (income/expense/net)
 export const fetchSummary = async (
   token: string,
   params: { granularity: Granularity; startDate?: string; endDate?: string },
   signal?: AbortSignal
 ): Promise<SummaryResponse> => {
-  const res = await axios.get<SummaryResponse>("/api/transactions/summary", {
-    ...authHeader(token),
+  const { data } = await http.get<SummaryResponse>("/api/transactions/summary", {
+    ...auth(token),
     params,
     signal,
   });
-  return res.data;
+  return data;
 };

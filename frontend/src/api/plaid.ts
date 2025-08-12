@@ -1,56 +1,41 @@
-import axios from "axios";
-
-const API_URL = "http://localhost:5000/api/plaid";
+import { http, auth } from "./http";
 
 // ✅ Get Transactions
-export async function fetchPlaidTransactions(token: string) {
-  const response = await axios.get(`${API_URL}/transactions`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return response.data;
-}
+export const fetchPlaidTransactions = async (token: string) => {
+  const { data } = await http.get("/api/plaid/transactions", auth(token));
+  return data;
+};
 
 // ✅ Create Link Token
 export const createLinkToken = async (token: string) => {
-  const res = await axios.post(
-    `${API_URL}/create_link_token`,
-    {},
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  return res.data;
+  const { data } = await http.post("/api/plaid/create_link_token", {}, auth(token));
+  return data; // { link_token }
 };
 
 // ✅ Exchange Public Token
 export const exchangePublicToken = async (token: string, publicToken: string) => {
-  const res = await axios.post(
-    `${API_URL}/exchange_public_token`,
+  const { data } = await http.post(
+    "/api/plaid/exchange_public_token",
     { public_token: publicToken },
-    { headers: { Authorization: `Bearer ${token}` } }
+    auth(token)
   );
-  return res.data;
+  return data;
 };
 
 // ✅ Get Accounts (balances, names, types)
 export const fetchPlaidAccounts = async (token: string) => {
-  const res = await axios.get(`${API_URL}/accounts`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return res.data;
+  const { data } = await http.get("/api/plaid/accounts", auth(token));
+  return data;
 };
 
-// ✅ New Link Token (GET version for testing)
+// ✅ New Link Token (GET version)
 export const fetchLinkTokenGET = async (token: string) => {
-  const res = await axios.get(`${API_URL}/link-token`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return res.data;
+  const { data } = await http.get("/api/plaid/link-token", auth(token));
+  return data;
 };
 
-
-
+// ✅ Investments
 export const fetchInvestments = async (token: string) => {
-  const res = await axios.get(`${API_URL}/investments`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return res.data; // { holdings, securities, accounts }
+  const { data } = await http.get("/api/plaid/investments", auth(token));
+  return data; // { holdings, securities, accounts }
 };

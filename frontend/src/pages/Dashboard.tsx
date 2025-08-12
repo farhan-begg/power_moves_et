@@ -10,7 +10,9 @@ export default function Dashboard() {
   const order: string[] = useAppSelector((s) => s.widgets.order);
   const byId = useAppSelector((s) => s.widgets.byId);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const onDragEnd = (e: DragEndEvent) => {
     const activeId = String(e.active.id);
@@ -32,9 +34,17 @@ export default function Dashboard() {
               if (!w) return null;
               const Comp = widgetRenderer[w.type];
               if (!Comp) return null;
+
+              // Make Quick Stats widget wider so large numbers fit nicely
+              const span = w.type === "quick-stats" ? "sm:col-span-2 lg:col-span-3" : "";
+
               return (
-                <div key={id} className="min-h-[180px]">
-                  <SortableWidget id={id} title={w.title} onRemove={() => dispatch(removeWidget(id))}>
+                <div key={id} className={`min-h-[180px] ${span}`}>
+                  <SortableWidget
+                    id={id}
+                    title={w.title}
+                    onRemove={() => dispatch(removeWidget(id))}
+                  >
                     <Comp />
                   </SortableWidget>
                 </div>
