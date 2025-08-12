@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import mongoose from "mongoose";
+import mongoose, { PipelineStage } from "mongoose";
 import Transaction from "../models/Transaction";
 import { AuthRequest, protect } from "../middleware/authMiddleware";
 
@@ -189,43 +189,56 @@ router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: "Error fetching transaction stats", details: err.message });
   }
 });
-
-// Summary stats (total income, expense, and balance)
 router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = new mongoose.Types.ObjectId(req.user);
+    const { granularity = "month", startDate, endDate } = req.query as {
+      granularity?: "day" | "month" | "year";
+      startDate?: string;
+      endDate?: string;
+    };
 
-    const summary = await Transaction.aggregate([
-      { $match: { userId } },
+    const userId = new mongoose.Types.ObjectId(req.user);
+    const match: Record<string, any> = { userId };
+
+    if (startDate || endDate) {
+      match.date = {};
+      if (startDate) match.date.$gte = new Date(startDate);
+      if (endDate) match.date.$lte = new Date(endDate);
+    }
+
+    const formatMap: Record<"day" | "month" | "year", string> = {
+      day: "%Y-%m-%d",
+      month: "%Y-%m",
+      year: "%Y",
+    };
+    const format = formatMap[(granularity as "day" | "month" | "year") ?? "month"];
+
+    const pipeline: PipelineStage[] = [
+      { $match: match },
       {
         $group: {
-          _id: "$type",
-          totalAmount: { $sum: "$amount" }
-        }
-      }
-    ]);
+          _id: { $dateToString: { format, date: "$date" } },
+          income: { $sum: { $cond: [{ $eq: ["$type", "income"] }, "$amount", 0] } },
+          expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          period: "$_id",
+          income: 1,
+          expense: 1,
+          net: { $subtract: ["$income", "$expense"] },
+        },
+      },
+      { $sort: { period: 1 } },
+    ];
 
-    let totalIncome = 0;
-    let totalExpense = 0;
-
-    summary.forEach((s) => {
-      if (s._id === "income") totalIncome = s.totalAmount;
-      if (s._id === "expense") totalExpense = s.totalAmount;
-    });
-
-    const netBalance = totalIncome - totalExpense;
-
-    res.json({
-      totalIncome,
-      totalExpense,
-      netBalance
-    });
+    const data = await Transaction.aggregate(pipeline);
+    res.json({ granularity, data });
   } catch (err: any) {
-    console.error("❌ Error fetching summary:", err);
-    res.status(500).json({ error: "Error fetching summary", details: err.message });
+    console.error("❌ Summary error:", err.message || err);
+    res.status(500).json({ error: "Failed to fetch summary", details: err.message || err });
   }
 });
-
-
-
 export default router;

@@ -1,14 +1,38 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import User from "../models/User";
 import jwt from "jsonwebtoken";
 import plaidClient from "../services/plaidService";
 import { decrypt } from "../utils/cryptoUtils";
 import Transaction from "../models/Transaction";
+import { protect, AuthRequest } from "../middleware/authMiddleware"; // <-- add this
+
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 
 console.log("🔐 Using JWT_SECRET:", JWT_SECRET);
+
+
+
+
+// GET /api/auth/me  -> current user profile (requires Bearer token)
+router.get("/me", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.user).select("-password -__v");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      plaidAccessToken: user.plaidAccessToken ?? null,
+    });
+  } catch (err: any) {
+    console.error("❌ /me error:", err.message || err);
+    res.status(500).json({ error: "Failed to fetch user", details: err.message });
+  }
+});
+
 // Register
 router.post("/register", async (req, res) => {
   try {
@@ -115,5 +139,8 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ error: "Login failed", details: err.message });
   }
 });
+
+
+
 
 export default router;

@@ -17,7 +17,7 @@ router.get("/link-token", protect, async (req: AuthRequest, res: Response) => {
     const response = await plaidClient.linkTokenCreate({
       user: { client_user_id: req.user! },
       client_name: "Expense Tracker",
-      products: [Products.Transactions],
+      products: [Products.Transactions, Products.Investments],
       country_codes: [CountryCode.Us],
       language: "en",
     });
@@ -170,3 +170,29 @@ router.get("/accounts", protect, async (req: AuthRequest, res: Response) => {
 
 
 export default router;
+
+
+// 🆕 GET /api/plaid/investments
+router.get("/investments", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.user);
+    if (!user?.plaidAccessToken) {
+      return res.status(400).json({ error: "No Plaid account linked" });
+    }
+
+    const accessToken = decrypt(user.plaidAccessToken);
+
+    const response = await plaidClient.investmentsHoldingsGet({
+      access_token: accessToken,
+    });
+
+    res.json({
+      holdings: response.data.holdings,
+      securities: response.data.securities,
+      accounts: response.data.accounts,
+    });
+  } catch (err: any) {
+    console.error("❌ Plaid investments error:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to fetch investment holdings", details: err.message });
+  }
+});

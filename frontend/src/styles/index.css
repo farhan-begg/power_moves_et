@@ -13,7 +13,7 @@
 :root {
   --user-bg: #f9fafb;
   --user-text: #111827;
-  --user-primary: #3b82f6;
+  --user-primary: #3b83f638;
   --user-card: #ffffff;
 }
 
@@ -21,6 +21,6 @@
 [data-theme="dark"] {
   --user-bg: #1f2937;
   --user-text: #f9fafb;
-  --user-primary: #6366f1;
+  --user-primary: #6365f13a;
   --user-card: #374151;
 }

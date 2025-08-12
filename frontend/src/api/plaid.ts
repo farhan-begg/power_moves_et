@@ -45,3 +45,12 @@ export const fetchLinkTokenGET = async (token: string) => {
   });
   return res.data;
 };
+
+
+
+export const fetchInvestments = async (token: string) => {
+  const res = await axios.get(`${API_URL}/investments`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data; // { holdings, securities, accounts }
+};

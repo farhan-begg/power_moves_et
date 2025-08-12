@@ -1,24 +1,40 @@
+// src/models/User.ts
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
+
+export interface IPlaidToken {
+  content: string;
+  iv: string;
+  tag: string;
+}
 
 export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
-  plaidAccessToken?: { content: string; iv: string; tag: string };
+  plaidAccessToken: IPlaidToken | null; // <-- allow null
 }
 
-const UserSchema: Schema<IUser> = new Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-plaidAccessToken: {
-  type: mongoose.Schema.Types.Mixed,
-  default: null
-}
+const PlaidTokenSchema = new Schema<IPlaidToken>(
+  {
+    content: { type: String, required: true },
+    iv: { type: String, required: true },
+    tag: { type: String, required: true },
+  },
+  { _id: false }
+);
 
-}, { timestamps: true });
+const UserSchema: Schema<IUser> = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, index: true },
+    password: { type: String, required: true },
+    // Use the sub-schema instead of Mixed, so TS & Mongoose agree
+    plaidAccessToken: { type: PlaidTokenSchema, default: null },
+  },
+  { timestamps: true }
+);
 
 // Hash password before saving
 UserSchema.pre("save", async function (next) {

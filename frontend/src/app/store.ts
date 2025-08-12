@@ -1,11 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "../features/auth/authSlice";
-import transactionReducer from "../features/transactions/transactionSlice";
+import transactionsReducer from "../features/transactions/transactionSlice";
+import widgetsReducer from "../features/widgets/widgetsSlice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
-    transactions: transactionReducer,
+    transactions: transactionsReducer,
+    widgets: widgetsReducer,   // <-- add this
   },
 });
 
