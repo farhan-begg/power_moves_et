@@ -1,0 +1,32 @@
+import React from "react";
+import PlaidConnectWidget from "../widgets/PlaidConnectWidget";
+import StatTodayWidget from "../widgets/StatTodayWidget";
+import StatMonthWidget from "../widgets/StatMonthWidget";
+import StatYearWidget from "../widgets/StatYearWidget";
+import IncomeExpenseChartWidget from "../widgets/IncomeExpenseChartWidget";
+import BankFlowWidget from "../widgets/BankFlowWidget";
+import TransactionsListWidget from "../widgets/TransactionsListWidget";
+import NetWorthWidget from "../widgets/NetWorthWidget";
+import AccountsWidget from "../widgets/AccountsWidget";
+import CardsWidget from "../widgets/CardsWidget";
+import InvestmentsWidget from "../widgets/InvestmentsWidget";
+import type { WidgetType } from "../../features/widgets/widgetsSlice";
+
+const registry: Record<WidgetType, React.ComponentType> = {
+  "plaid-connect": PlaidConnectWidget,
+  "stat-today": StatTodayWidget,
+  "stat-month": StatMonthWidget,
+  "stat-year": StatYearWidget,
+  "income-expense-chart": IncomeExpenseChartWidget,
+  "bank-flow": BankFlowWidget,
+  "transactions-list": TransactionsListWidget,
+  "net-worth": NetWorthWidget,
+  "accounts": AccountsWidget,
+  "cards": CardsWidget,
+  "investments": InvestmentsWidget,
+};
+
+export default function WidgetHost({ type }: { type: WidgetType }) {
+  const Cmp = registry[type];
+  return Cmp ? <Cmp /> : null;
+}

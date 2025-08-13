@@ -39,7 +39,7 @@ export default function TransactionsListWidget() {
   const { startDate, endDate } = React.useMemo(() => lastNDaysISO(30), []);
   const [filter, setFilter] = React.useState<Filter>("all");
   const [page, setPage] = React.useState(1);
-  const limit = 5;
+  const limit = 6;
 
   React.useEffect(() => setPage(1), [filter, startDate, endDate]);
 

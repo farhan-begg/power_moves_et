@@ -54,14 +54,14 @@ function presetToRange(preset: Preset) {
   return { startDate: d.toISOString().slice(0, 10), endDate: end };
 }
 
-/** Plugin: once layout is known, replace solid fills with real gradients and refresh once */
+/** Plugin: swap solid fills for gradients once layout is known */
 const gradientPlugin: Plugin = {
   id: "applyGradientsOnce",
-  afterLayout(chart, _args, _opts) {
-    const { chartArea, ctx, data } = chart;
+  afterLayout(chart) {
+    const { chartArea, ctx, data } = chart as any;
     if (!chartArea) return;
 
-    const makeGrad = (hex: string, aTop = 0.28, aBottom = 0.0) => {
+    const makeGrad = (hex: string, aTop = 0.22, aBottom = 0.0) => {
       const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
       const toRGBA = (h: string, a: number) => {
         const c = h.replace("#", "");
@@ -117,38 +117,63 @@ export default function IncomeExpenseChartWidget() {
   const incomeValues = data?.data.map((d) => d.income) ?? [];
   const expenseValues = data?.data.map((d) => d.expense) ?? [];
 
+  // ⬇️ Thinner, sharper line & small points
   const datasets: ChartData<"line">["datasets"] = [
     showIncome && {
       label: "Income",
       data: incomeValues,
       borderColor: incomeColor,
-      backgroundColor: "rgba(34,197,94,0.25)", // temp until plugin swaps to gradient
-      _baseColor: incomeColor, // <-- used by plugin
+      backgroundColor: "rgba(34,197,94,0.18)",
+      _baseColor: incomeColor,
       fill: true,
-      tension: 0.35,
-      pointRadius: 2,
-      pointHoverRadius: 4,
-      borderWidth: 2,
+      tension: 0.08,            // <-- sharper corners
+      borderWidth: 1,           // <-- skinnier line
+      pointRadius: 1,           // <-- tiny points
+      pointHoverRadius: 3,
+      pointHitRadius: 10,       // UX: easy to hover
+      pointBorderWidth: 0,
+      borderCapStyle: "butt",
+      borderJoinStyle: "miter",
     },
     showExpense && {
       label: "Expense",
       data: expenseValues,
       borderColor: expenseColor,
-      backgroundColor: "rgba(239,68,68,0.25)", // temp until plugin swaps to gradient
-      _baseColor: expenseColor, // <-- used by plugin
+      backgroundColor: "rgba(239,68,68,0.18)",
+      _baseColor: expenseColor,
       fill: true,
-      tension: 0.35,
-      pointRadius: 2,
-      pointHoverRadius: 4,
-      borderWidth: 2,
+      tension: 0.08,
+      borderWidth: 1,
+      pointRadius: 1,
+      pointHoverRadius: 3,
+      pointHitRadius: 10,
+      pointBorderWidth: 0,
+      borderCapStyle: "butt",
+      borderJoinStyle: "miter",
     },
   ].filter(Boolean) as any;
 
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
+    spanGaps: true, // avoid weird breaks without thickening lines
+    interaction: { mode: "index", intersect: false },
+    elements: {
+      line: {
+        borderWidth: 1,     // global fallback
+        tension: 0.08,
+        borderCapStyle: "butt",
+        borderJoinStyle: "miter",
+      },
+      point: {
+        radius: 1,
+        hoverRadius: 3,
+        hitRadius: 10,
+        borderWidth: 0,
+      },
+    },
     plugins: {
-      legend: { display: false }, // no default filters
+      legend: { display: false },
       tooltip: {
         displayColors: false,
         backgroundColor: "rgba(15, 23, 42, 0.92)",
@@ -185,12 +210,10 @@ export default function IncomeExpenseChartWidget() {
 
   return (
     <div className={glass}>
-      {/* Header + modern controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Granularity pills */}
           <div className="flex gap-1 bg-white/5 border border-white/10 rounded-full p-1">
             {(["day", "month", "year"] as Granularity[]).map((g) => (
               <button
@@ -203,7 +226,6 @@ export default function IncomeExpenseChartWidget() {
             ))}
           </div>
 
-          {/* Presets */}
           <div className="flex gap-1 bg-white/5 border border-white/10 rounded-full p-1">
             {(["30d", "90d", "ytd", "1y", "all"] as Preset[]).map((p) => (
               <button
@@ -216,7 +238,6 @@ export default function IncomeExpenseChartWidget() {
             ))}
           </div>
 
-          {/* Series toggles */}
           <div className="flex gap-1 bg-white/5 border border-white/10 rounded-full p-1">
             <button
               onClick={() => setShowIncome((s) => !s)}
@@ -236,18 +257,13 @@ export default function IncomeExpenseChartWidget() {
         </div>
       </div>
 
-      {/* Chart */}
       <div className="h-[260px]">
         {isLoading && <p className="text-white/70">Loading…</p>}
         {isError && <p className="text-rose-300">Failed to load chart.</p>}
         {!isLoading && !isError && (datasets.length === 0 ? (
           <p className="text-white/70">Select at least one series.</p>
         ) : (
-          <Line
-            data={{ labels, datasets }}
-            options={options}
-            plugins={[gradientPlugin]}
-          />
+          <Line data={{ labels, datasets }} options={options} plugins={[gradientPlugin]} />
         ))}
       </div>
     </div>

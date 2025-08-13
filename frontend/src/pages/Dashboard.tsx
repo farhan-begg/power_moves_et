@@ -5,16 +5,16 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
   closestCenter,
   MeasuringStrategy,
-  DragStartEvent,
+  DragOverlay,
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import SortableWidget from "../components/widgets/SortableWidget";
 import { widgetRenderer } from "../components/widgets/registry";
 import { useAppDispatch, useAppSelector } from "../hooks/hooks";
 import { reorder, removeWidget } from "../features/widgets/widgetsSlice";
-import { DragOverlay } from "@dnd-kit/core";
 
 export default function Dashboard() {
   const dispatch = useAppDispatch();
@@ -27,10 +27,7 @@ export default function Dashboard() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  const onDragStart = (e: DragStartEvent) => {
-    setActiveId(String(e.active.id));
-  };
-
+  const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
   const onDragEnd = (e: DragEndEvent) => {
     const activeId = String(e.active.id);
     const overId = e.over ? String(e.over.id) : null;
@@ -40,9 +37,6 @@ export default function Dashboard() {
     setActiveId(null);
   };
 
-  const onDragCancel = () => setActiveId(null);
-
-  // Overlay preview of the active widget (prevents the grid from “jumping”)
   const Overlay = () => {
     if (!activeId) return null;
     const w = byId[activeId];
@@ -69,41 +63,34 @@ export default function Dashboard() {
         sensors={sensors}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        onDragCancel={onDragCancel}
         collisionDetection={closestCenter}
-        measuring={{
-          droppable: { strategy: MeasuringStrategy.Always }, // keep sizes measured
-        }}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       >
-        <SortableContext items={order.map(String)} strategy={rectSortingStrategy}>
-          {/* Make rows consistent to reduce “weird gaps”.
-              You can tweak this min height to match your widgets. */}
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 auto-rows-[minmax(220px,auto)]">
-       {order.map((id: string) => {
-              const w = byId[id];
-              if (!w) return null;
-              const Comp = widgetRenderer[w.type];
-              if (!Comp) return null;
+<SortableContext items={order.map(String)} strategy={rectSortingStrategy}>
+  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    {order.map((id: string) => {
+      const w = byId[id];
+      if (!w) return null;
+      const Comp = widgetRenderer[w.type];
+      if (!Comp) return null;
 
-              return (
-                <div key={id} className="min-h-[180px]">
-                  <SortableWidget
-                    id={id}
-                    title={w.title}
-                    onRemove={() => dispatch(removeWidget(id))}
-                  >
-                    <Comp />
-                  </SortableWidget>
-                </div>
-              );
-            })}
-          </div>
-        </SortableContext>
-
-        <DragOverlay
-          adjustScale={false}
-          dropAnimation={{ duration: 180, easing: "ease-out" }}
+      return (
+        // ⬇️ SortableWidget is now the direct grid child
+        <SortableWidget
+          key={id}
+          id={id}
+          title={w.title}
+          onRemove={() => dispatch(removeWidget(id))}
         >
+          <Comp />
+        </SortableWidget>
+      );
+    })}
+  </div>
+</SortableContext>
+
+
+        <DragOverlay adjustScale={false} dropAnimation={{ duration: 180, easing: "ease-out" }}>
           <Overlay />
         </DragOverlay>
       </DndContext>
