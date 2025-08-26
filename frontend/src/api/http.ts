@@ -2,7 +2,7 @@
 import axios from "axios";
 
 export const http = axios.create({
-  baseURL: "/", // CRA proxy will forward /api/* to 5000 in dev
+  baseURL: "http://localhost:5000",
 });
 
 // Small helper to add Authorization header

@@ -10,10 +10,13 @@ import NetWorthWidget from "./NetWorthWidget";
 import AccountsWidget from "./AccountsWidget";
 import CardsWidget from "./CardsWidget";
 import InvestmentsWidget from "./InvestmentsWidget";
+import StocksPortfolioWidget from "./StocksPortfolioWidget";
+
 import type { WidgetType } from "../../features/widgets/widgetsSlice";
-import PlaidLinkButton from "../PlaidLinkButton";
+import AdviceWidget from "./AdviceWidget";
+
 export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
-  "plaid-connect": PlaidLinkButton,
+  "plaid-connect": PlaidConnectWidget,
   "stat-today": StatTodayWidget,
   "stat-month": StatMonthWidget,
   "stat-year": StatYearWidget,
@@ -24,4 +27,6 @@ export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
   "accounts": AccountsWidget,
   "cards": CardsWidget,
   "investments": InvestmentsWidget,
+  "stocks-portfolio": StocksPortfolioWidget,
+  "advice": AdviceWidget,            // 👈 added
 };

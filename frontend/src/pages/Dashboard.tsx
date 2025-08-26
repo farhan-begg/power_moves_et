@@ -14,7 +14,7 @@ import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import SortableWidget from "../components/widgets/SortableWidget";
 import { widgetRenderer } from "../components/widgets/registry";
 import { useAppDispatch, useAppSelector } from "../hooks/hooks";
-import { reorder, removeWidget } from "../features/widgets/widgetsSlice";
+import { reorder, removeWidget, ensureDefaults } from "../features/widgets/widgetsSlice";
 
 export default function Dashboard() {
   const dispatch = useAppDispatch();
@@ -26,6 +26,12 @@ export default function Dashboard() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
+
+      React.useEffect(() => {
+    dispatch(ensureDefaults());
+  }, [dispatch]);
+
+
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
   const onDragEnd = (e: DragEndEvent) => {

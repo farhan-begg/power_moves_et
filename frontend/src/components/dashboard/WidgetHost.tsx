@@ -1,3 +1,4 @@
+// src/components/widgets/WidgetHost.tsx (or wherever this file lives)
 import React from "react";
 import PlaidConnectWidget from "../widgets/PlaidConnectWidget";
 import StatTodayWidget from "../widgets/StatTodayWidget";
@@ -10,7 +11,9 @@ import NetWorthWidget from "../widgets/NetWorthWidget";
 import AccountsWidget from "../widgets/AccountsWidget";
 import CardsWidget from "../widgets/CardsWidget";
 import InvestmentsWidget from "../widgets/InvestmentsWidget";
+import StocksPortfolioWidget from "../widgets/StocksPortfolioWidget";
 import type { WidgetType } from "../../features/widgets/widgetsSlice";
+import AdviceWidget from "../widgets/AdviceWidget";
 
 const registry: Record<WidgetType, React.ComponentType> = {
   "plaid-connect": PlaidConnectWidget,
@@ -24,6 +27,8 @@ const registry: Record<WidgetType, React.ComponentType> = {
   "accounts": AccountsWidget,
   "cards": CardsWidget,
   "investments": InvestmentsWidget,
+  "stocks-portfolio": StocksPortfolioWidget,
+  "advice": AdviceWidget,                 // 👈 added
 };
 
 export default function WidgetHost({ type }: { type: WidgetType }) {

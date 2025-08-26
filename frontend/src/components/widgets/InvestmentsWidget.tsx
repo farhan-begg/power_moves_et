@@ -1,39 +1,33 @@
+// src/components/widgets/plaid/InvestmentsWidget.tsx
+import React, { useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/hooks";
 import { fetchInvestments } from "../../features/plaid/plaidSlice";
 
 export default function InvestmentsWidget() {
   const dispatch = useAppDispatch();
-  const { holdings } = useAppSelector((s) => s.plaid);
+  const { holdings, totalValue, loading, error } = useAppSelector(s => s.plaid);
+  const refresh = () => dispatch(fetchInvestments());
+
+  useEffect(() => { if (!holdings.length) refresh(); }, []);
 
   return (
-    <div className="p-3">
-      <div className="flex justify-between items-center mb-2">
+    <div>
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-medium">Investments</h3>
-        <button onClick={() => dispatch(fetchInvestments())} className="text-xs px-2 py-1 border rounded-lg">Refresh</button>
+        <button onClick={refresh} className="text-xs underline" disabled={loading}>Refresh</button>
       </div>
-      {!holdings.length && <div className="text-sm opacity-70">No holdings yet (Sandbox often returns none).</div>}
-      {!!holdings.length && (
-        <div className="max-h-64 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left opacity-70">
-              <tr><th className="py-1">Ticker</th><th className="py-1">Name</th><th className="py-1">Qty</th><th className="py-1">Value</th></tr>
-            </thead>
-            <tbody>
-              {holdings.map(h => (
-                <tr key={`${h.accountId}-${h.securityId}`} className="border-t border-white/10">
-                  <td className="py-1">{h.ticker ?? "—"}</td>
-                  <td className="py-1">{h.name ?? "—"}</td>
-                  <td className="py-1">{h.quantity ?? 0}</td>
-                  <td className="py-1">
-                    {new Intl.NumberFormat(undefined, { style: "currency", currency: h.isoCurrencyCode ?? "USD" })
-                      .format(h.value ?? 0)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {error && <div className="text-xs text-red-300 mb-2">{error}</div>}
+      <div className="text-sm mb-2">Total: {totalValue.toFixed(2)}</div>
+      {holdings.length ? (
+        <ul className="text-xs space-y-1 max-h-40 overflow-auto">
+          {holdings.map((h: any, i: number) => (
+            <li key={i} className="flex justify-between">
+              <span>{h.ticker || h.name || h.securityId}</span>
+              <span>{(h.value ?? 0).toFixed(2)} {h.isoCurrencyCode || ""}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (!loading && !error) ? <div className="text-xs opacity-70">No holdings (Sandbox can return empty).</div> : null}
     </div>
   );
 }

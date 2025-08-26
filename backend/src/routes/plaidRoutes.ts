@@ -6,6 +6,7 @@ import Transaction from "../models/Transaction";
 import { AuthRequest, protect } from "../middleware/authMiddleware";
 import { encrypt, decrypt } from "../utils/cryptoUtils";
 import { Products, CountryCode } from "plaid";
+import ManualAsset from "../models/ManualAsset";
 
 const router = Router();
 
@@ -156,8 +157,13 @@ router.get("/cards", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+
 /* ----------------------------------------------------------
    5) Net worth (assets - debts) with Liabilities refinement
+---------------------------------------------------------- */
+/* ----------------------------------------------------------
+   5) Net worth (assets - debts) with Liabilities refinement
+   + Manual transactions treated as "Manual Cash" asset
 ---------------------------------------------------------- */
 router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -169,43 +175,82 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
 
     const sum = (arr: number[]) => arr.reduce((s, n) => s + (Number.isFinite(n) ? n : 0), 0);
 
+    // Assets via Plaid (depository + investment)
     const assetTypes = new Set(["depository", "investment"]);
-    const debtTypes = new Set(["credit", "loan", "mortgage"]);
+    const assetsPlaid = sum(
+      accounts.filter(a => assetTypes.has(a.type)).map(a => a.balances.current || 0)
+    );
 
-    const assets = sum(accounts.filter((a) => assetTypes.has(a.type)).map((a) => a.balances.current || 0));
-    let debts = sum(accounts.filter((a) => debtTypes.has(a.type)).map((a) => Math.max(a.balances.current || 0, 0)));
+    // Debts via Plaid (fallback only)
+    const debtTypes = new Set(["credit", "loan"]);
+    let debts = sum(
+      accounts.filter(a => debtTypes.has(a.type)).map(a => Math.max(a.balances.current || 0, 0))
+    );
 
+    // Try refining debts with Liabilities
     try {
       const liab = await plaidClient.liabilitiesGet({ access_token: accessToken });
-      const credit = liab.data.liabilities?.credit ?? [];
-      const student = liab.data.liabilities?.student ?? [];
+      const credit   = liab.data.liabilities?.credit   ?? [];
+      const student  = liab.data.liabilities?.student  ?? [];
       const mortgage = liab.data.liabilities?.mortgage ?? [];
 
       const byId: Record<string, any> = {};
       for (const a of accounts) byId[a.account_id] = a;
 
-      const creditSum = sum(credit.map((c: any) => byId[String(c.account_id)]?.balances?.current || 0));
-      const studentSum = sum(student.map((s: any) => byId[String(s.account_id)]?.balances?.current || 0));
+      const creditSum   = sum(credit.map((c: any)   => byId[String(c.account_id)]?.balances?.current || 0));
+      const studentSum  = sum(student.map((s: any)  => byId[String(s.account_id)]?.balances?.current || 0));
       const mortgageSum = sum(mortgage.map((m: any) => byId[String(m.account_id)]?.balances?.current || 0));
 
       debts = creditSum + studentSum + mortgageSum;
     } catch {
-      /* keep account-based debts */
+      /* keep account-based debts if Liabilities not available */
     }
 
-    const netWorth = assets - debts;
+    // 🔹 Fold in manual pieces
+    const userId = new mongoose.Types.ObjectId(String(req.user));
 
+    // Manual cash from manual transactions (income - expense)
+    const manualAgg = await Transaction.aggregate([
+      { $match: { userId, source: "manual" } },
+      {
+        $group: {
+          _id: null,
+          income:  { $sum: { $cond: [{ $eq: ["$type", "income"]  }, "$amount", 0] } },
+          expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
+        },
+      },
+    ]);
+    const manualCash = (manualAgg[0]?.income || 0) - (manualAgg[0]?.expense || 0); // can be negative
+
+    // Manual assets from your ManualAsset collection
+    const manualAssetsAgg = await ManualAsset.aggregate([
+      { $match: { userId } },
+      { $group: { _id: null, total: { $sum: "$value" } } },
+    ]);
+    const manualAssetsTotal = manualAssetsAgg[0]?.total ?? 0;
+
+    // Final tallies
+    const assetsWithManual = assetsPlaid + manualCash + manualAssetsTotal;
+    const netWorth = assetsWithManual - debts;
+
+    // Breakdown (Plaid + manual buckets)
     const breakdownByType: Record<string, number> = {};
     for (const a of accounts) {
       const key = a.type || "other";
       breakdownByType[key] = (breakdownByType[key] ?? 0) + (a.balances.current || 0);
     }
+    breakdownByType["manual_cash"] = manualCash;
+    breakdownByType["manual_assets"] = manualAssetsTotal;
 
     res.json({
       summary: {
-        assets: Number(assets.toFixed(2)),
+        assets: Number(assetsWithManual.toFixed(2)),
         debts: Number(debts.toFixed(2)),
         netWorth: Number(netWorth.toFixed(2)),
+      },
+      manual: {
+        cash: Number(manualCash.toFixed(2)),
+        assets: Number(manualAssetsTotal.toFixed(2)),
       },
       breakdownByType,
       currencyHint: accounts[0]?.balances?.iso_currency_code || "USD",
@@ -215,6 +260,7 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: "Failed to compute net worth" });
   }
 });
+
 
 /* ----------------------------------------------------------
    6) Transactions (sync last 30 days → Mongo upsert)
@@ -310,6 +356,8 @@ router.get("/investments", protect, async (req: AuthRequest, res: Response) => {
     });
   }
 });
+
+
 
 /* ----------------------------------------------------------
    (Optional) quick route debugger

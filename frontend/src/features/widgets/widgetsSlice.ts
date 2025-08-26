@@ -12,7 +12,9 @@ export type WidgetType =
   | "net-worth"
   | "accounts"
   | "cards"
-  | "investments";
+  | "investments"
+  | "stocks-portfolio"
+  | "advice";                      // 👈 added
 
 export type WidgetSize = "sm" | "lg";
 
@@ -44,10 +46,16 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w9:  { id: "w9",  type: "accounts",             title: "Accounts",            size: "lg" }, // wide by default
   w10: { id: "w10", type: "cards",                title: "Credit Cards",        size: "sm" },
   w11: { id: "w11", type: "investments",          title: "Investments",         size: "sm" },
+  w12: { id: "w12", type: "stocks-portfolio",     title: "Stocks & ETFs",       size: "sm" },
+  w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" }, // 👈 new default
 };
 
 export const DEFAULT_ORDER = [
-  "w1","w2","w3","w4","w5","w6","w7","w8","w9","w10","w11"
+  "w2", "w3", "w8",
+  "w5", "w7",
+  "w9", "w12",
+  "w10", "w11",
+  "w13",                              // 👈 place Advice at the end (or wherever you like)
 ];
 
 const initialState: WidgetsState = {
@@ -94,7 +102,6 @@ const widgetsSlice = createSlice({
       const w = state.byId[action.payload];
       if (w) w.size = w.size === "lg" ? "sm" : "lg";
     },
-    // Add missing defaults to existing layouts (non-destructive)
     ensureDefaults: (state) => {
       for (const id of DEFAULT_ORDER) {
         if (!state.byId[id]) state.byId[id] = { ...DEFAULT_WIDGETS[id] };

@@ -1,90 +1,79 @@
+// src/features/plaid/plaidSlice.ts
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
-type NetWorth = {
-  summary: { assets: number; debts: number; netWorth: number };
-  breakdownByType: Record<string, number>;
-  currencyHint: string;
-};
-type Card = {
-  accountId: string;
-  name: string;
-  mask: string | null;
-  currentBalance: number | null;
-  isoCurrencyCode: string | null;
-  lastPaymentDate?: string | null;
-  nextPaymentDueDate?: string | null;
-};
-type Holding = {
-  accountId: string;
-  securityId: string;
-  quantity: number;
-  name: string | null;
-  ticker: string | null;
-  value: number;
-  isoCurrencyCode: string | null;
-};
+const API = "http://localhost:5000/api/plaid";
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+});
 
-function authHeader() {
-  const jwt = localStorage.getItem("token") ?? "";
-  return { Authorization: `Bearer ${jwt}` };
-}
-
-export const fetchNetWorth = createAsyncThunk("plaid/netWorth", async () => {
-  const res = await fetch("http://localhost:5000/api/plaid/net-worth", { headers: authHeader() });
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as NetWorth;
+export const fetchAccounts = createAsyncThunk("plaid/accounts", async () => {
+  const res = await fetch(`${API}/accounts`, { headers: authHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Failed to fetch accounts");
+  // backend returns { accounts }
+  return json.accounts ?? json; // ← handles old shape too
 });
 
 export const fetchCards = createAsyncThunk("plaid/cards", async () => {
-  const res = await fetch("http://localhost:5000/api/plaid/cards", { headers: authHeader() });
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as { source: "liabilities" | "accounts"; cards: Card[] };
+  const res = await fetch(`${API}/cards`, { headers: authHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Failed to fetch cards");
+  // backend returns { source, cards }
+  return json.cards ?? json;
 });
 
 export const fetchInvestments = createAsyncThunk("plaid/investments", async () => {
-  const res = await fetch("http://localhost:5000/api/plaid/investments", { headers: authHeader() });
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as { totalValue: number; holdings: Holding[] };
+  const res = await fetch(`${API}/investments`, { headers: authHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(
+    (json.details && JSON.stringify(json.details)) || json.error || "Failed to fetch investments"
+  );
+  // backend returns { totalValue, holdings, securities }
+  return { totalValue: json.totalValue ?? 0, holdings: json.holdings ?? [] };
 });
 
-export const fetchAllPlaid = createAsyncThunk("plaid/fetchAll", async (_, { dispatch }) => {
-  await Promise.all([
-    dispatch(fetchNetWorth()),
-    dispatch(fetchCards()),
-    dispatch(fetchInvestments()),
-  ]);
+export const fetchNetWorth = createAsyncThunk("plaid/netWorth", async () => {
+  const res = await fetch(`${API}/net-worth`, { headers: authHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Failed to fetch net worth");
+  // backend returns { summary, breakdownByType, currencyHint }
+  return json; // keep full object
 });
 
-type State = {
-  loading: boolean;
-  error: string | null;
-  netWorth: NetWorth | null;
-  cards: Card[];
-  holdings: Holding[];
-  lastLoadedAt: string | null;
-};
-const initialState: State = {
-  loading: false,
-  error: null,
-  netWorth: null,
-  cards: [],
-  holdings: [],
-  lastLoadedAt: null,
-};
-
-const plaidSlice = createSlice({
+const slice = createSlice({
   name: "plaid",
-  initialState,
+  initialState: {
+    accounts: [] as any[],
+    cards: [] as any[],
+    holdings: [] as any[],
+    totalValue: 0,
+    netWorth: null as null | { summary: { assets: number; debts: number; netWorth: number }; breakdownByType: Record<string, number>; currencyHint?: string },
+    loading: false,
+    error: null as null | string,
+  },
   reducers: {},
   extraReducers: (b) => {
-    b.addCase(fetchAllPlaid.pending, (s) => { s.loading = true; s.error = null; });
-    b.addCase(fetchAllPlaid.fulfilled, (s) => { s.loading = false; s.lastLoadedAt = new Date().toISOString(); });
-    b.addCase(fetchAllPlaid.rejected, (s, a) => { s.loading = false; s.error = a.error.message || "Failed to load"; });
+    const start = (s: any) => { s.loading = true; s.error = null; };
+    const fail = (s: any, a: any) => { s.loading = false; s.error = a.error?.message || String(a.payload || a.error); };
 
-    b.addCase(fetchNetWorth.fulfilled, (s, a) => { s.netWorth = a.payload; });
-    b.addCase(fetchCards.fulfilled, (s, a) => { s.cards = a.payload.cards || []; });
-    b.addCase(fetchInvestments.fulfilled, (s, a) => { s.holdings = a.payload.holdings || []; });
-  },
+    b.addCase(fetchAccounts.pending, start);
+    b.addCase(fetchAccounts.fulfilled, (s, a) => { s.loading = false; s.accounts = a.payload; });
+    b.addCase(fetchAccounts.rejected, fail);
+
+    b.addCase(fetchCards.pending, start);
+    b.addCase(fetchCards.fulfilled, (s, a) => { s.loading = false; s.cards = a.payload; });
+    b.addCase(fetchCards.rejected, fail);
+
+    b.addCase(fetchInvestments.pending, start);
+    b.addCase(fetchInvestments.fulfilled, (s, a) => {
+      s.loading = false; s.holdings = a.payload.holdings; s.totalValue = a.payload.totalValue;
+    });
+    b.addCase(fetchInvestments.rejected, fail);
+
+    b.addCase(fetchNetWorth.pending, start);
+    b.addCase(fetchNetWorth.fulfilled, (s, a) => { s.loading = false; s.netWorth = a.payload; });
+    b.addCase(fetchNetWorth.rejected, fail);
+  }
 });
 
-export default plaidSlice.reducer;
+export default slice.reducer;

@@ -31,8 +31,8 @@ const currency = new Intl.NumberFormat(undefined, {
 });
 
 type Preset = "30d" | "90d" | "ytd" | "1y" | "all";
-const incomeColor = "#22c55e"; // emerald-500
-const expenseColor = "#ef4444"; // red-500
+const incomeColor = "#22c55e";
+const expenseColor = "#ef4444";
 
 function presetToRange(preset: Preset) {
   const today = new Date();
@@ -84,7 +84,7 @@ const gradientPlugin: Plugin = {
         changed = true;
       }
     });
-    if (changed) chart.update("none");
+    if (changed) (chart as any).update("none");
   },
 };
 
@@ -98,7 +98,12 @@ export default function IncomeExpenseChartWidget() {
 
   const range = React.useMemo(() => presetToRange(preset), [preset]);
 
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch, // 👈 we'll use this to refresh on external events
+  } = useQuery({
     queryKey: ["summary", granularity, preset, range.startDate ?? null, range.endDate ?? null],
     queryFn: ({ signal }) =>
       fetchSummary(
@@ -113,11 +118,23 @@ export default function IncomeExpenseChartWidget() {
     enabled: !!token,
   });
 
+  // 🔁 Auto-refetch when other widgets broadcast data changes
+  React.useEffect(() => {
+    const onChanged = () => refetch();
+    window.addEventListener("data:transactions:changed", onChanged);
+    window.addEventListener("data:manualassets:changed", onChanged);
+    window.addEventListener("data:networth:changed", onChanged);
+    return () => {
+      window.removeEventListener("data:transactions:changed", onChanged);
+      window.removeEventListener("data:manualassets:changed", onChanged);
+      window.removeEventListener("data:networth:changed", onChanged);
+    };
+  }, [refetch]);
+
   const labels = data?.data.map((d) => d.period) ?? [];
   const incomeValues = data?.data.map((d) => d.income) ?? [];
   const expenseValues = data?.data.map((d) => d.expense) ?? [];
 
-  // ⬇️ Thinner, sharper line & small points
   const datasets: ChartData<"line">["datasets"] = [
     showIncome && {
       label: "Income",
@@ -126,11 +143,11 @@ export default function IncomeExpenseChartWidget() {
       backgroundColor: "rgba(34,197,94,0.18)",
       _baseColor: incomeColor,
       fill: true,
-      tension: 0.08,            // <-- sharper corners
-      borderWidth: 1,           // <-- skinnier line
-      pointRadius: 1,           // <-- tiny points
+      tension: 0.08,
+      borderWidth: 1,
+      pointRadius: 1,
       pointHoverRadius: 3,
-      pointHitRadius: 10,       // UX: easy to hover
+      pointHitRadius: 10,
       pointBorderWidth: 0,
       borderCapStyle: "butt",
       borderJoinStyle: "miter",
@@ -156,21 +173,11 @@ export default function IncomeExpenseChartWidget() {
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
-    spanGaps: true, // avoid weird breaks without thickening lines
+    spanGaps: true,
     interaction: { mode: "index", intersect: false },
     elements: {
-      line: {
-        borderWidth: 1,     // global fallback
-        tension: 0.08,
-        borderCapStyle: "butt",
-        borderJoinStyle: "miter",
-      },
-      point: {
-        radius: 1,
-        hoverRadius: 3,
-        hitRadius: 10,
-        borderWidth: 0,
-      },
+      line: { borderWidth: 1, tension: 0.08, borderCapStyle: "butt", borderJoinStyle: "miter" },
+      point: { radius: 1, hoverRadius: 3, hitRadius: 10, borderWidth: 0 },
     },
     plugins: {
       legend: { display: false },
@@ -194,61 +201,60 @@ export default function IncomeExpenseChartWidget() {
         grid: { color: "rgba(255,255,255,0.08)" },
       },
       y: {
-        ticks: {
-          color: "rgba(255,255,255,0.75)",
-          callback: (v) => currency.format(Number(v)),
-        },
+        ticks: { color: "rgba(255,255,255,0.75)", callback: (v) => currency.format(Number(v)) },
         grid: { color: "rgba(255,255,255,0.08)" },
       },
     },
   };
 
-  const pill =
-    "px-3 py-1.5 rounded-full text-sm font-medium border transition-colors";
-  const pillActive = "bg-white/15 border-white/20 text-white";
-  const pillInactive = "bg-white/5 border-white/10 text-white/70 hover:bg-white/10";
+  const textBtn = "text-sm font-medium px-2 py-1 transition-colors";
+  const textActive = "text-white underline underline-offset-4";
+  const textInactive = "text-white/70 hover:text-white hover:underline underline-offset-4";
 
   return (
     <div className={glass}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1 bg-white/5 border border-white/10 rounded-full p-1">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Granularity */}
+          <div className="flex gap-3">
             {(["day", "month", "year"] as Granularity[]).map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
-                className={`${pill} ${granularity === g ? pillActive : pillInactive}`}
+                className={`${textBtn} ${granularity === g ? textActive : textInactive}`}
               >
                 {g === "day" ? "Daily" : g === "month" ? "Monthly" : "Yearly"}
               </button>
             ))}
           </div>
 
-          <div className="flex gap-1 bg-white/5 border border-white/10 rounded-full p-1">
+          {/* Presets */}
+          <div className="flex gap-3">
             {(["30d", "90d", "ytd", "1y", "all"] as Preset[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPreset(p)}
-                className={`${pill} ${preset === p ? pillActive : pillInactive}`}
+                className={`${textBtn} ${preset === p ? textActive : textInactive}`}
               >
                 {p.toUpperCase()}
               </button>
             ))}
           </div>
 
-          <div className="flex gap-1 bg-white/5 border border-white/10 rounded-full p-1">
+          {/* Toggles */}
+          <div className="flex gap-3">
             <button
               onClick={() => setShowIncome((s) => !s)}
-              className={`${pill} ${showIncome ? pillActive : pillInactive}`}
+              className={`${textBtn} ${showIncome ? textActive : textInactive}`}
               title="Toggle Income"
             >
               Income
             </button>
             <button
               onClick={() => setShowExpense((s) => !s)}
-              className={`${pill} ${showExpense ? pillActive : pillInactive}`}
+              className={`${textBtn} ${showExpense ? textActive : textInactive}`}
               title="Toggle Expense"
             >
               Expense
