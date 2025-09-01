@@ -161,52 +161,85 @@ router.get("/cards", protect, async (req: AuthRequest, res: Response) => {
 /* ----------------------------------------------------------
    5) Net worth (assets - debts) with Liabilities refinement
 ---------------------------------------------------------- */
-/* ----------------------------------------------------------
-   5) Net worth (assets - debts) with Liabilities refinement
-   + Manual transactions treated as "Manual Cash" asset
----------------------------------------------------------- */
+// server/routes/plaid.ts (or wherever your router is)
+// server/routes/plaid.ts (or wherever your router lives)
 router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
   try {
     const accessToken = await getDecryptedAccessToken(req, res);
     if (!accessToken) return;
 
+    const filterAccountId = String(req.query.accountId || "").trim() || null;
+
     const { data } = await plaidClient.accountsBalanceGet({ access_token: accessToken });
-    const accounts = data.accounts;
+    let accounts = data.accounts;
+
+    // If filtering, keep only the requested account
+    if (filterAccountId) {
+      accounts = accounts.filter(
+        (a) =>
+          a.account_id === filterAccountId ||
+          (a as any).accountId === filterAccountId // if you ever mapped custom ids
+      );
+    }
 
     const sum = (arr: number[]) => arr.reduce((s, n) => s + (Number.isFinite(n) ? n : 0), 0);
 
     // Assets via Plaid (depository + investment)
     const assetTypes = new Set(["depository", "investment"]);
     const assetsPlaid = sum(
-      accounts.filter(a => assetTypes.has(a.type)).map(a => a.balances.current || 0)
+      accounts.filter((a) => assetTypes.has(a.type as any)).map((a) => a.balances.current || 0)
     );
 
-    // Debts via Plaid (fallback only)
+    // Debts via Plaid (credit + loan)
     const debtTypes = new Set(["credit", "loan"]);
     let debts = sum(
-      accounts.filter(a => debtTypes.has(a.type)).map(a => Math.max(a.balances.current || 0, 0))
+      accounts
+        .filter((a) => debtTypes.has(a.type as any))
+        .map((a) => Math.max(a.balances.current || 0, 0))
     );
 
-    // Try refining debts with Liabilities
+    // Try refining debts with Liabilities for only the filtered accounts
     try {
       const liab = await plaidClient.liabilitiesGet({ access_token: accessToken });
-      const credit   = liab.data.liabilities?.credit   ?? [];
-      const student  = liab.data.liabilities?.student  ?? [];
+      const credit = liab.data.liabilities?.credit ?? [];
+      const student = liab.data.liabilities?.student ?? [];
       const mortgage = liab.data.liabilities?.mortgage ?? [];
 
-      const byId: Record<string, any> = {};
-      for (const a of accounts) byId[a.account_id] = a;
+      const allowedIds = new Set(accounts.map((a) => a.account_id));
 
-      const creditSum   = sum(credit.map((c: any)   => byId[String(c.account_id)]?.balances?.current || 0));
-      const studentSum  = sum(student.map((s: any)  => byId[String(s.account_id)]?.balances?.current || 0));
-      const mortgageSum = sum(mortgage.map((m: any) => byId[String(m.account_id)]?.balances?.current || 0));
+      const creditSum = sum(
+        credit
+          .filter((c: any) => allowedIds.has(String(c.account_id)))
+          .map((c: any) => {
+            const acct = accounts.find((a) => a.account_id === String(c.account_id));
+            return acct?.balances?.current || 0;
+          })
+      );
+
+      const studentSum = sum(
+        student
+          .filter((s: any) => allowedIds.has(String(s.account_id)))
+          .map((s: any) => {
+            const acct = accounts.find((a) => a.account_id === String(s.account_id));
+            return acct?.balances?.current || 0;
+          })
+      );
+
+      const mortgageSum = sum(
+        mortgage
+          .filter((m: any) => allowedIds.has(String(m.account_id)))
+          .map((m: any) => {
+            const acct = accounts.find((a) => a.account_id === String(m.account_id));
+            return acct?.balances?.current || 0;
+          })
+      );
 
       debts = creditSum + studentSum + mortgageSum;
     } catch {
-      /* keep account-based debts if Liabilities not available */
+      /* fall back to account balances if Liabilities not available */
     }
 
-    // 🔹 Fold in manual pieces
+    // 🔹 Manual pieces (GLOBAL — not per-account; change if you want per-account)
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
     // Manual cash from manual transactions (income - expense)
@@ -215,25 +248,24 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
       {
         $group: {
           _id: null,
-          income:  { $sum: { $cond: [{ $eq: ["$type", "income"]  }, "$amount", 0] } },
+          income: { $sum: { $cond: [{ $eq: ["$type", "income"] }, "$amount", 0] } },
           expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
         },
       },
     ]);
-    const manualCash = (manualAgg[0]?.income || 0) - (manualAgg[0]?.expense || 0); // can be negative
+    const manualCash = (manualAgg[0]?.income || 0) - (manualAgg[0]?.expense || 0);
 
-    // Manual assets from your ManualAsset collection
+    // Manual assets
     const manualAssetsAgg = await ManualAsset.aggregate([
       { $match: { userId } },
       { $group: { _id: null, total: { $sum: "$value" } } },
     ]);
     const manualAssetsTotal = manualAssetsAgg[0]?.total ?? 0;
 
-    // Final tallies
     const assetsWithManual = assetsPlaid + manualCash + manualAssetsTotal;
     const netWorth = assetsWithManual - debts;
 
-    // Breakdown (Plaid + manual buckets)
+    // Breakdown: only include the filtered accounts’ balances
     const breakdownByType: Record<string, number> = {};
     for (const a of accounts) {
       const key = a.type || "other";
@@ -254,6 +286,8 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
       },
       breakdownByType,
       currencyHint: accounts[0]?.balances?.iso_currency_code || "USD",
+      // helpful echo for the UI
+      appliedFilter: filterAccountId || null,
     });
   } catch (err: any) {
     console.error("❌ /net-worth error:", err.response?.data || err.message || err);
@@ -261,10 +295,11 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
-
 /* ----------------------------------------------------------
    6) Transactions (sync last 30 days → Mongo upsert)
 ---------------------------------------------------------- */
+// routes/plaidRoutes.ts  (only the /transactions handler changed)
+// routes/plaidRoutes.ts (add/replace this handler)
 router.get("/transactions", protect, async (req: AuthRequest, res: Response) => {
   try {
     const accessToken = await getDecryptedAccessToken(req, res);
@@ -274,44 +309,84 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     startDate.setDate(startDate.getDate() - 30);
     const endDate = new Date();
 
+    // optional filters from query
+    const { accountId, accountIds } = req.query as { accountId?: string; accountIds?: string };
+    const idsFromCSV = (accountIds || "")
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+    const wantedAccountIds = accountId
+      ? Array.from(new Set([accountId, ...idsFromCSV]))
+      : idsFromCSV;
+
+    // fetch accounts to map names
+    const accountsResp = await plaidClient.accountsBalanceGet({ access_token: accessToken });
+    const accountsById = new Map<string, any>();
+    for (const a of accountsResp.data.accounts) accountsById.set(a.account_id, a);
+
+    // pull transactions (optionally scoped to account_ids)
     const plaidResponse = await plaidClient.transactionsGet({
       access_token: accessToken,
       start_date: startDate.toISOString().split("T")[0],
       end_date: endDate.toISOString().split("T")[0],
+      options: wantedAccountIds.length ? { account_ids: wantedAccountIds } : undefined,
     });
 
     const plaidTransactions = plaidResponse.data.transactions;
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
-    const formatted = plaidTransactions.map((txn: any) => ({
-      userId,
-      type: txn.amount >= 0 ? "expense" : "income",
-      category:
-        txn.personal_finance_category?.detailed ||
-        txn.personal_finance_category?.primary ||
-        txn.category?.[0] ||
-        "Uncategorized",
-      amount: Math.abs(txn.amount),
-      date: new Date(txn.date),
-      description: txn.name,
-      source: "plaid" as const,
+    // normalize for Mongo (including accountId + accountName)
+    const formatted = plaidTransactions.map((txn: any) => {
+      const acc = txn.account_id ? accountsById.get(txn.account_id) : undefined;
+      const accountName =
+        acc?.name || acc?.official_name || acc?.subtype || acc?.type || undefined;
+
+      return {
+        userId,
+        type: txn.amount >= 0 ? "expense" : "income",
+        category:
+          txn.personal_finance_category?.detailed ||
+          txn.personal_finance_category?.primary ||
+          txn.category?.[0] ||
+          "Uncategorized",
+        amount: Math.abs(txn.amount),
+        date: new Date(txn.date),
+        description: txn.name,
+        source: "plaid" as const,
+        accountId: txn.account_id ?? undefined,
+        accountName,
+      };
+    });
+
+    // upsert; include accountId in the uniqueness key
+    const ops = formatted.map((t) => ({
+      updateOne: {
+        filter: {
+          userId: t.userId,
+          date: t.date,
+          amount: t.amount,
+          description: t.description,
+          source: "plaid",
+          accountId: t.accountId ?? null,
+        },
+        update: { $setOnInsert: t },
+        upsert: true,
+      },
     }));
+    if (ops.length) await Transaction.bulkWrite(ops, { ordered: false });
 
-    for (const t of formatted) {
-      await Transaction.updateOne(
-        { userId: t.userId, amount: t.amount, date: t.date, description: t.description },
-        { $setOnInsert: t },
-        { upsert: true }
-      );
-    }
+    // return from Mongo (respect same filter)
+    const mongoQuery: any = { userId };
+    if (wantedAccountIds.length) mongoQuery.accountId = { $in: wantedAccountIds };
 
-    const all = await Transaction.find({ userId }).sort({ date: -1 });
+    const all = await Transaction.find(mongoQuery).sort({ date: -1 });
     res.json(all);
   } catch (err: any) {
-    console.error("❌ /transactions sync error:", err.response?.data || err.message || err);
+    console.error("❌ /plaid/transactions error:", err.response?.data || err.message || err);
     res.status(500).json({ error: "Failed to fetch Plaid transactions" });
   }
 });
+
 
 /* ----------------------------------------------------------
    7) Investments (holdings + securities)

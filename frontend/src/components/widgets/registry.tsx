@@ -14,9 +14,10 @@ import StocksPortfolioWidget from "./StocksPortfolioWidget";
 
 import type { WidgetType } from "../../features/widgets/widgetsSlice";
 import AdviceWidget from "./AdviceWidget";
+import PlaidLinkButton from "../PlaidLinkButton";
 
 export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
-  "plaid-connect": PlaidConnectWidget,
+  "plaid-connect": PlaidLinkButton,
   "stat-today": StatTodayWidget,
   "stat-month": StatMonthWidget,
   "stat-year": StatYearWidget,

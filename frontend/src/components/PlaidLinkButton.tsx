@@ -21,7 +21,7 @@ export default function PlaidLinkButton() {
   const [linkToken, setLinkToken] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
-  // 👀 Check if user already linked
+  // Check if user already linked
   const { data: userInfo } = useQuery<UserInfo>({
     queryKey: ["userInfo"],
     enabled: Boolean(token),
@@ -35,11 +35,11 @@ export default function PlaidLinkButton() {
 
   const isLinked = Boolean(userInfo?.plaidAccessToken);
 
-  // 1) Create link token (only if not linked)
+  // 1) Create link token (use correct route)
   const createLinkToken = useMutation({
     mutationFn: async () => {
       const { data } = await axios.post<LinkTokenRes>(
-        "/api/plaid/create_link_token",
+        "/api/plaid/link-token", // ✅ match backend
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -50,11 +50,11 @@ export default function PlaidLinkButton() {
       setErrorMsg(err?.response?.data?.error || "Failed to create link token"),
   });
 
-  // 2) Exchange public token
+  // 2) Exchange public token (use correct route)
   const exchangePublicToken = useMutation({
     mutationFn: async (public_token: string) => {
       await axios.post(
-        "/api/plaid/exchange_public_token",
+        "/api/plaid/exchange-public-token", // ✅ match backend
         { public_token },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -84,7 +84,6 @@ export default function PlaidLinkButton() {
 
   if (!token) return null;
 
-  // ✅ If already linked, show a success pill instead of the button
   if (isLinked) {
     return (
       <div className="inline-flex items-center gap-2">

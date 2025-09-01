@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSummary, Granularity } from "../../api/transaction";
+import { fetchPlaidAccounts } from "../../api/plaid";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -88,8 +89,21 @@ const gradientPlugin: Plugin = {
   },
 };
 
+type PlaidAccount = {
+  account_id?: string;
+  accountId?: string;
+  id?: string;
+  name?: string;
+  official_name?: string | null;
+  subtype?: string | null;
+  mask?: string | null;
+};
+
 export default function IncomeExpenseChartWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
+  const selectedAccountId = useSelector(
+    (s: RootState) => s.accountFilter.selectedAccountId
+  ); // <-- GLOBAL filter
 
   const [granularity, setGranularity] = React.useState<Granularity>("month");
   const [preset, setPreset] = React.useState<Preset>("90d");
@@ -98,13 +112,46 @@ export default function IncomeExpenseChartWidget() {
 
   const range = React.useMemo(() => presetToRange(preset), [preset]);
 
+  // Accounts (for label display)
+  const { data: accountsRaw } = useQuery<PlaidAccount[] | { accounts: PlaidAccount[] }>({
+    queryKey: ["accounts"],
+    queryFn: () => fetchPlaidAccounts(token!),
+    enabled: !!token,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (p) => p as any,
+  });
+
+  const accounts = React.useMemo<PlaidAccount[]>(() => {
+    const raw = accountsRaw as any;
+    if (Array.isArray(raw)) return raw;
+    if (raw && Array.isArray(raw.accounts)) return raw.accounts as PlaidAccount[];
+    return [];
+  }, [accountsRaw]);
+
+  const accMap = React.useMemo(() => {
+    const m = new Map<string, string>();
+    accounts.forEach((a) => {
+      const id = a.account_id || a.accountId || a.id;
+      const label = a.name || a.official_name || a.subtype || "Account";
+      if (id) m.set(id, label);
+    });
+    return m;
+  }, [accounts]);
+
   const {
     data,
     isLoading,
     isError,
-    refetch, // 👈 we'll use this to refresh on external events
+    refetch,
   } = useQuery({
-    queryKey: ["summary", granularity, preset, range.startDate ?? null, range.endDate ?? null],
+    queryKey: [
+      "summary",
+      granularity,
+      preset,
+      range.startDate ?? null,
+      range.endDate ?? null,
+      selectedAccountId ?? "", // <— react to global filter
+    ],
     queryFn: ({ signal }) =>
       fetchSummary(
         token!,
@@ -112,10 +159,12 @@ export default function IncomeExpenseChartWidget() {
           granularity,
           ...(range.startDate ? { startDate: range.startDate } : {}),
           ...(range.endDate ? { endDate: range.endDate } : {}),
+          ...(selectedAccountId ? { accountId: selectedAccountId } : {}), // <— pass to backend
         },
         signal
       ),
     enabled: !!token,
+    placeholderData: (p) => p as any,
   });
 
   // 🔁 Auto-refetch when other widgets broadcast data changes
@@ -213,8 +262,15 @@ export default function IncomeExpenseChartWidget() {
 
   return (
     <div className={glass}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
+          {selectedAccountId && (
+            <div className="text-[11px] text-white/60">
+              Account: <span className="text-white">{accMap.get(selectedAccountId) || "Selected account"}</span>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-4">
           {/* Granularity */}

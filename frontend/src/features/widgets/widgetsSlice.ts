@@ -51,7 +51,7 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
 };
 
 export const DEFAULT_ORDER = [
-  "w2", "w3", "w8",
+  "w1","w2", "w3", "w4", "w8",
   "w5", "w7",
   "w9", "w12",
   "w10", "w11",

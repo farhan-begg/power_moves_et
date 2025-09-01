@@ -27,11 +27,14 @@ export interface CardItem {
   nextPaymentDueDate: string | null;
 }
 
-export interface NetWorthResponse {
+
+export type NetWorthResponse = {
   summary: { assets: number; debts: number; netWorth: number };
-  breakdownByType: Record<string, number>;
-  currencyHint: string;
-}
+  manual: { cash: number; assets: number };
+  currencyHint?: string;
+  breakdownByType?: Record<string, number>;
+};
+
 
 /* ========= Endpoints (arrays) ========= */
 
@@ -71,7 +74,7 @@ export const fetchPlaidCards = async (token: string): Promise<CardItem[]> => {
 
 // Net worth (keep object)
 export const fetchNetWorth = async (token: string): Promise<NetWorthResponse> => {
-  const { data } = await http.get("/api/plaid/net-worth", auth(token));
+  const { data } = await http.get<NetWorthResponse>("/api/plaid/net-worth", auth(token));
   return data;
 };
 

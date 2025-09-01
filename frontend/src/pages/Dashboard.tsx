@@ -15,6 +15,7 @@ import SortableWidget from "../components/widgets/SortableWidget";
 import { widgetRenderer } from "../components/widgets/registry";
 import { useAppDispatch, useAppSelector } from "../hooks/hooks";
 import { reorder, removeWidget, ensureDefaults } from "../features/widgets/widgetsSlice";
+import GlobalAccountFilter from "../components/filters/GlobalAccountFilter";
 
 export default function Dashboard() {
   const dispatch = useAppDispatch();
@@ -64,6 +65,11 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-white">
       <h1 className="text-2xl font-semibold mb-4">Your Dashboard</h1>
+
+            <div className="flex items-center justify-between">
+        <h1 className="text-xl text-white font-semibold">Overview</h1>
+        <GlobalAccountFilter />
+      </div>
 
       <DndContext
         sensors={sensors}

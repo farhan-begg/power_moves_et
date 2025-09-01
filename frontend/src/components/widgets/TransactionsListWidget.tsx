@@ -17,6 +17,17 @@ import {
 } from "@heroicons/react/24/outline";
 
 type Filter = "all" | "expense" | "income";
+type Preset = "7d" | "30d" | "90d" | "ytd" | "1y" | "custom";
+
+type PlaidAccount = {
+  account_id?: string;
+  accountId?: string;
+  id?: string;
+  name?: string;
+  official_name?: string | null;
+  subtype?: string | null;
+  mask?: string | null;
+};
 
 const glass =
   "rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
@@ -24,44 +35,116 @@ const glass =
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
-function lastNDaysISO(days = 30) {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - (days - 1));
-  return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  };
+const toISO = (d: Date) => {
+  const dd = new Date(d);
+  dd.setHours(0, 0, 0, 0);
+  return dd.toISOString().slice(0, 10);
+};
+
+function presetRange(p: Preset) {
+  const today = new Date();
+  const endDate = toISO(today);
+
+  switch (p) {
+    case "7d": {
+      const s = new Date(today);
+      s.setDate(s.getDate() - 6);
+      return { startDate: toISO(s), endDate };
+    }
+    case "30d": {
+      const s = new Date(today);
+      s.setDate(s.getDate() - 29);
+      return { startDate: toISO(s), endDate };
+    }
+    case "90d": {
+      const s = new Date(today);
+      s.setDate(s.getDate() - 89);
+      return { startDate: toISO(s), endDate };
+    }
+    case "ytd": {
+      const s = new Date(today.getFullYear(), 0, 1);
+      return { startDate: toISO(s), endDate };
+    }
+    case "1y": {
+      const s = new Date(today);
+      s.setFullYear(s.getFullYear() - 1);
+      s.setDate(s.getDate() + 1); // include today
+      return { startDate: toISO(s), endDate };
+    }
+    case "custom":
+    default:
+      return { startDate: "", endDate: "" };
+  }
 }
 
 export default function TransactionsListWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
-  const { startDate, endDate } = React.useMemo(() => lastNDaysISO(30), []);
+  const selectedAccountId = useSelector(
+    (s: RootState) => s.accountFilter.selectedAccountId
+  ); // <-- GLOBAL filter
+
+  // local filters
   const [filter, setFilter] = React.useState<Filter>("all");
+  const [preset, setPreset] = React.useState<Preset>("30d");
+  const init = React.useMemo(() => presetRange("30d"), []);
+  const [startDate, setStartDate] = React.useState(init.startDate);
+  const [endDate, setEndDate] = React.useState(init.endDate);
   const [page, setPage] = React.useState(1);
   const limit = 6;
 
-  React.useEffect(() => setPage(1), [filter, startDate, endDate]);
+  // reset page when filters change
+  React.useEffect(() => setPage(1), [filter, startDate, endDate, selectedAccountId]);
 
-  const { data: accounts } = useQuery({
+  // update dates when preset changes (except custom)
+  React.useEffect(() => {
+    if (preset === "custom") return;
+    const r = presetRange(preset);
+    setStartDate(r.startDate);
+    setEndDate(r.endDate);
+  }, [preset]);
+
+  // Accounts (used to display bank names beside rows)
+  const { data: accountsRaw } = useQuery<PlaidAccount[] | { accounts: PlaidAccount[] }>({
     queryKey: ["accounts"],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (p) => p as any,
   });
 
+  const accounts = React.useMemo<PlaidAccount[]>(() => {
+    const raw = accountsRaw as unknown;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object" && Array.isArray((raw as any).accounts)) {
+      return (raw as any).accounts as PlaidAccount[];
+    }
+    return [];
+  }, [accountsRaw]);
+
+  // Transactions (honors GLOBAL selectedAccountId)
   const { data: txRes, isLoading, isError, isFetching } = useQuery<PagedTransactionsResponse>({
-    queryKey: ["transactions", "list", filter, startDate, endDate, page, limit],
+    queryKey: [
+      "transactions",
+      "list",
+      filter,
+      startDate,
+      endDate,
+      page,
+      limit,
+      selectedAccountId, // <— react to global filter
+    ],
     queryFn: () =>
       fetchTransactions(token!, {
         type: filter === "all" ? undefined : filter,
-        startDate,
-        endDate,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
         page,
         limit,
         sortBy: "date",
         order: "desc",
+        accountId: selectedAccountId || undefined, // <— send to backend
       }),
-    enabled: !!token,
+    enabled: !!token && !!(startDate && endDate),
     placeholderData: (prev) => prev,
   });
 
@@ -71,8 +154,10 @@ export default function TransactionsListWidget() {
 
   const accMap = React.useMemo(() => {
     const m = new Map<string, string>();
-    (accounts || []).forEach((a: any) => {
-      m.set(a.account_id, a.name || a.official_name || a.subtype || "Bank");
+    accounts.forEach((a) => {
+      const id = a.account_id || a.accountId || a.id;
+      const label = a.name || a.official_name || a.subtype || "Account";
+      if (id) m.set(id, label);
     });
     return m;
   }, [accounts]);
@@ -116,6 +201,7 @@ export default function TransactionsListWidget() {
 
   return (
     <div className={glass}>
+      {/* Header + controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
@@ -123,21 +209,77 @@ export default function TransactionsListWidget() {
             {startDate} → {endDate}
             {isFetching && <span className="ml-2 text-white/40">(updating…)</span>}
           </div>
+          {selectedAccountId && (
+            <div className="mt-1 text-[11px] text-white/60">
+              Account: <span className="text-white">
+                {accMap.get(selectedAccountId) || "Selected account"}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Type pills */}
           <FilterPill label="All" value="all" />
           <FilterPill label="Spending" value="expense" />
           <FilterPill label="Income" value="income" />
         </div>
       </div>
 
+      {/* Date presets + custom range */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {(["7d", "30d", "90d", "ytd", "1y", "custom"] as Preset[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPreset(p)}
+            className={[
+              "px-2.5 py-1.5 rounded-md text-xs border transition-colors",
+              preset === p
+                ? "bg-white/15 text-white border-white/25"
+                : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10",
+            ].join(" ")}
+          >
+            {p.toUpperCase()}
+          </button>
+        ))}
+
+        {preset === "custom" && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              className="rounded-md bg-white/10 px-2 py-1.5 text-xs text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <span className="text-white/50 text-xs">to</span>
+            <input
+              type="date"
+              className="rounded-md bg-white/10 px-2 py-1.5 text-xs text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Loading / error states */}
       {isLoading && <p className="text-white/70">Loading…</p>}
       {isError && <p className="text-rose-300">Failed to load transactions.</p>}
 
+      {/* Empty state */}
       {!isLoading && !isError && transactions.length === 0 && (
-        <div className="text-white/70">No results for this filter.</div>
+        <div className="text-white/70">
+          No results for <b>{filter === "all" ? "all types" : filter}</b>
+          {selectedAccountId && (
+            <>
+              {" "}in <b>{accMap.get(selectedAccountId) || "selected account"}</b>
+            </>
+          )}
+          {" "}between <b>{startDate}</b> and <b>{endDate}</b>.
+        </div>
       )}
 
+      {/* Results */}
       {!isLoading && !isError && transactions.length > 0 && (
         <>
           <ul className="divide-y divide-white/10">
@@ -152,7 +294,6 @@ export default function TransactionsListWidget() {
                   <RowIcon type={t.type} />
 
                   <div className="flex-1 min-w-0">
-                    {/* Top row: merchant/description bold + amount right-aligned */}
                     <div className="flex items-baseline justify-between gap-3">
                       <div className="truncate font-semibold text-white">
                         {t.description || t.category || "Transaction"}
@@ -166,7 +307,6 @@ export default function TransactionsListWidget() {
                       </div>
                     </div>
 
-                    {/* Sub row: small bank + tiny action badge + date */}
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/60">
                       {bank && <span className="truncate">{bank}</span>}
                       <span className="text-white/30">•</span>

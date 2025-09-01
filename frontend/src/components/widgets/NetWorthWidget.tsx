@@ -1,6 +1,19 @@
 // src/components/widgets/plaid/NetWorthWidget.tsx
+// Thunk expectation:
+// createAsyncThunk('plaid/netWorth', async ({ accountId }: { accountId?: string } = {}) => {
+//   const token = localStorage.getItem("token") ?? "";
+//   const url = new URL('http://localhost:5000/api/plaid/net-worth');
+//   if (accountId) url.searchParams.set('accountId', accountId);
+//   const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` }});
+//   const json = await res.json();
+//   if (!res.ok) throw new Error(json.error || 'Failed to fetch net worth');
+//   return json;
+// });
+
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/hooks";
+import { useSelector } from "react-redux";
+import { RootState } from "../../app/store";
 import { fetchNetWorth } from "../../features/plaid/plaidSlice";
 import {
   ArrowPathIcon,
@@ -10,6 +23,8 @@ import {
   XMarkIcon,
   CheckIcon,
 } from "@heroicons/react/24/outline";
+import { useQuery } from "@tanstack/react-query";
+import { fetchPlaidAccounts } from "../../api/plaid";
 
 type ManualAsset = {
   _id: string;
@@ -24,7 +39,7 @@ type ManualAsset = {
 type ManualTxnForm = {
   type: "income" | "expense";
   category: string;
-  amount: string; // input as text
+  amount: string;
   description: string;
   date: string;
 };
@@ -33,7 +48,7 @@ type ManualAssetForm = {
   id?: string;
   name: string;
   type: "cash" | "security" | "property" | "other";
-  value: string; // input as text
+  value: string;
   currency: string;
   notes?: string;
   asOf?: string;
@@ -54,6 +69,41 @@ function money(n: number, currency: string = "USD") {
 export default function NetWorthWidget({ className = "" }: { className?: string }) {
   const dispatch = useAppDispatch();
   const { netWorth, loading, error } = useAppSelector((s) => s.plaid);
+
+  // Global account filter
+  const selectedAccountId = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+  const token = useSelector((s: RootState) => s.auth.token);
+
+  // Also fetch Plaid accounts (same as your Transactions widget) so we can render the name/mask
+  const { data: accountsRaw } = useQuery<any>({
+    queryKey: ["accounts"],
+    queryFn: () => fetchPlaidAccounts(token!),
+    enabled: !!token,
+  });
+
+  // Normalize accounts to a flat array with id/name/mask/etc.
+  const accounts = useMemo(() => {
+    const raw = accountsRaw as any;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object" && Array.isArray(raw.accounts)) return raw.accounts;
+    return [];
+  }, [accountsRaw]);
+
+  // Build a friendly label for the selected account
+  const selectedAccountLabel = useMemo(() => {
+    if (!selectedAccountId) return "";
+    const a =
+      accounts.find(
+        (x: any) =>
+          x.account_id === selectedAccountId ||
+          x.accountId === selectedAccountId ||
+          x.id === selectedAccountId
+      ) || null;
+    if (!a) return selectedAccountId; // fallback
+    const base = a.name || a.official_name || a.subtype || "Account";
+    const mask = a.mask ? ` ••••${String(a.mask).slice(-4)}` : "";
+    return `${base}${mask}`;
+  }, [accounts, selectedAccountId]);
 
   const jwt = localStorage.getItem("token") ?? "";
   const authHeaders = useMemo(
@@ -86,7 +136,12 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 
   const [editId, setEditId] = useState<string | null>(null);
 
-  const refresh = useCallback(() => dispatch(fetchNetWorth()), [dispatch]);
+  // Always respect the global filter: if selectedAccountId exists, pass it to the thunk
+  const refresh = useCallback(() => {
+    return dispatch(
+      fetchNetWorth(selectedAccountId ? { accountId: selectedAccountId } : undefined as any)
+    );
+  }, [dispatch, selectedAccountId]);
 
   const loadAssets = useCallback(async () => {
     if (!jwt) return;
@@ -102,6 +157,24 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     loadAssets().catch((e) => setErrLocal(e?.message ?? "Failed to load manual assets"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // refetch whenever the global account filter changes
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // auto-refetch on mutations
+  useEffect(() => {
+    const onChanged = () => refresh();
+    window.addEventListener("data:transactions:changed", onChanged);
+    window.addEventListener("data:manualassets:changed", onChanged);
+    window.addEventListener("data:networth:changed", onChanged);
+    return () => {
+      window.removeEventListener("data:transactions:changed", onChanged);
+      window.removeEventListener("data:manualassets:changed", onChanged);
+      window.removeEventListener("data:networth:changed", onChanged);
+    };
+  }, [refresh]);
 
   // ----- actions -----
   const addManualTxn = async () => {
@@ -127,7 +200,6 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
       });
       if (!res.ok) throw new Error(await res.text());
 
-      // notify others and refresh
       window.dispatchEvent(new CustomEvent("data:transactions:changed"));
       window.dispatchEvent(new CustomEvent("data:networth:changed"));
       await refresh();
@@ -219,7 +291,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
   };
 
   // ----- derived -----
-  const currency = netWorth?.currencyHint || "USD";
+  const currencyHint = netWorth?.currencyHint || "USD";
   const assetsSum = netWorth?.summary.assets ?? 0;
   const debts = netWorth?.summary.debts ?? 0;
   const net = netWorth?.summary.netWorth ?? 0;
@@ -234,7 +306,17 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
   if (error) {
     return (
       <Card className={className}>
-        <Header onRefresh={refresh} />
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-sm font-medium text-white/90">Net worth</h3>
+          <button
+            onClick={refresh}
+            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+            aria-label="Refresh net worth"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
         <div className="mt-4 text-rose-300 text-sm">Failed to load: {error}</div>
         <Btn onClick={refresh} className="mt-3">
           <ArrowPathIcon className="h-4 w-4" />
@@ -249,7 +331,25 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
       {/* soft glow */}
       <Glow positive={netPositive} />
 
-      <Header onRefresh={refresh} />
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h3 className="text-sm font-medium text-white/90">Net worth</h3>
+          {selectedAccountId && (
+            <div className="text-[11px] text-white/60 mt-0.5">
+              Account: <span className="text-white">{selectedAccountLabel}</span>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={refresh}
+          className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+          aria-label="Refresh net worth"
+        >
+          <ArrowPathIcon className="h-4 w-4" />
+          Refresh
+        </button>
+      </div>
 
       {/* Big net number */}
       <div className="mt-3 flex items-end justify-between">
@@ -262,7 +362,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
             ].join(" ")}
           >
             {netPositive ? "+" : "-"}
-            {money(Math.abs(net), currency)}
+            {money(Math.abs(net), currencyHint)}
           </div>
         </div>
 
@@ -280,8 +380,8 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 
       {/* Pills */}
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <Pill label="Assets" value={money(assetsSum, currency)} kind="positive" />
-        <Pill label="Debts" value={money(Math.abs(debts), currency)} kind="negative" prefix="-" />
+        <Pill label="Assets" value={money(assetsSum, currencyHint)} kind="positive" />
+        <Pill label="Debts" value={money(Math.abs(debts), currencyHint)} kind="negative" prefix="-" />
       </div>
 
       {/* Errors */}
@@ -306,7 +406,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
         </Btn>
       </div>
 
-      {/* ---------- Add Spending / Income ---------- */}
+      {/* --- Add Spending / Income --- */}
       {uiOpen === "add-txn" && (
         <FormCard title="Add spending or income" saving={saving}>
           <div className="grid gap-3 md:grid-cols-2">
@@ -405,9 +505,9 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
         </FormCard>
       )}
 
-      {/* ---------- Add / Edit Manual Asset ---------- */}
+      {/* --- Add / Edit Manual Asset --- */}
       {uiOpen === "add-asset" && (
-        <FormCard title={editId ? "Edit asset" : "Add manual asset" } saving={saving}>
+        <FormCard title={editId ? "Edit asset" : "Add manual asset"} saving={saving}>
           <div className="grid gap-3 md:grid-cols-2">
             <Field>
               <Label>Name</Label>
@@ -522,7 +622,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
         </FormCard>
       )}
 
-      {/* Manual assets list (edit/delete) */}
+      {/* Manual assets list */}
       <div className="mt-5">
         <div className="text-xs uppercase tracking-wide text-white/60 mb-2">Manual Assets</div>
         {assets.length === 0 ? (
@@ -537,7 +637,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
                 <div className="min-w-0">
                   <div className="text-sm">{a.name}</div>
                   <div className="text-xs opacity-70">
-                    {a.type} • {money(a.value, a.currency || currency)}
+                    {a.type} • {money(a.value, a.currency || currencyHint)}
                     {a.asOf ? ` • as of ${a.asOf.slice(0, 10)}` : ""}
                   </div>
                 </div>
@@ -559,7 +659,6 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 }
 
 /* ---------- small pieces/styles ---------- */
-
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div
@@ -584,24 +683,6 @@ function Glow({ positive }: { positive: boolean }) {
           : "radial-gradient(60% 60% at 50% 50%, rgba(244,63,94,.35), transparent)",
       }}
     />
-  );
-}
-
-function Header({ onRefresh }: { onRefresh?: () => void }) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <h3 className="text-sm font-medium text-white/90">Net worth</h3>
-      {onRefresh && (
-        <button
-          onClick={onRefresh}
-          className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
-          aria-label="Refresh net worth"
-        >
-          <ArrowPathIcon className="h-4 w-4" />
-          Refresh
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -726,7 +807,6 @@ function IconBtn({
 }
 
 /* ---------- form primitives ---------- */
-
 function FormCard({
   title,
   saving,
@@ -748,34 +828,25 @@ function FormCard({
   );
 }
 
-function Field({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+function Field({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={["flex flex-col gap-1", className].join(" ")}>{children}</div>;
 }
-
 function Label({ children }: { children: React.ReactNode }) {
   return <label className="text-[11px] text-white/60">{children}</label>;
 }
-
 function Help({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] text-white/50">{children}</div>;
 }
-
 function ErrorText({ children }: { children: React.ReactNode }) {
   return <div className="mt-1 text-[11px] text-rose-300">{children}</div>;
 }
-
 function Divider() {
   return <div className="my-3 h-px w-full bg-white/10" />;
 }
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { prefix?: string };
 function Input({ prefix, className = "", ...props }: InputProps) {
+  const ariaInvalid = (props as any)["aria-invalid"];
   if (prefix) {
     return (
       <div className="relative">
@@ -787,7 +858,7 @@ function Input({ prefix, className = "", ...props }: InputProps) {
           className={[
             "w-full rounded-lg bg-white/10 pl-7 pr-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40",
             "focus:outline-none focus:ring-white/20",
-            props["aria-invalid"] ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
+            ariaInvalid ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
             className,
           ].join(" ")}
         />
@@ -800,22 +871,21 @@ function Input({ prefix, className = "", ...props }: InputProps) {
       className={[
         "w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40",
         "focus:outline-none focus:ring-white/20",
-        props["aria-invalid"] ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
+        ariaInvalid ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
         className,
       ].join(" ")}
     />
   );
 }
+
 type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   error?: boolean | string;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
-  /** sm | md | lg */
   variantSize?: "sm" | "md" | "lg";
   isLoading?: boolean;
   children: React.ReactNode;
 };
-
 function Select({
   className = "",
   error,
@@ -859,11 +929,7 @@ function Select({
           className,
         ].join(" ")}
       >
-        {isLoading ? (
-          <option className="bg-slate-900 text-white">Loading…</option>
-        ) : (
-          children
-        )}
+        {isLoading ? <option className="bg-slate-900 text-white">Loading…</option> : children}
       </select>
 
       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
@@ -877,14 +943,10 @@ function Select({
         )}
       </span>
 
-      {typeof error === "string" && (
-        <div className="mt-1 text-[11px] text-rose-300">{error}</div>
-      )}
+      {typeof error === "string" && <div className="mt-1 text-[11px] text-rose-300">{error}</div>}
     </div>
   );
 }
-
-
 
 type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 function Textarea({ className = "", ...props }: TextareaProps) {
@@ -892,7 +954,7 @@ function Textarea({ className = "", ...props }: TextareaProps) {
     <textarea
       {...props}
       className={[
-        "min-h-[72px] w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10",
+        "min-h[72px] w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10",
         "focus:outline-none focus:ring-white/20",
         className,
       ].join(" ")}

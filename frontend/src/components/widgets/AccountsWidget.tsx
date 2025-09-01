@@ -14,11 +14,17 @@ const iconForSubtype = (sub?: string | null) => {
 
 export default function AccountsWidget() {
   const token = useSelector((s: RootState) => s.auth.token)!;
-  const { data: accounts = [], isLoading } = useQuery<PlaidAccount[]>({
-    queryKey: ["plaid", "accounts"],
-    queryFn: () => fetchPlaidAccounts(token),
-    enabled: !!token,
-  });
+const { data: raw, isLoading } = useQuery({
+  queryKey: ["plaid", "accounts"],
+  queryFn: () => fetchPlaidAccounts(token) as any, // if helper returns unknown shape
+  enabled: !!token,
+});
+
+  const accounts: PlaidAccount[] = React.useMemo(() => {
+    const arr = Array.isArray(raw) ? raw : raw?.accounts;
+    return Array.isArray(arr) ? arr : [];
+  }, [raw]);
+
 
   return (
     <div className={glass}>

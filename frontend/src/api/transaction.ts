@@ -1,3 +1,4 @@
+// src/api/transaction.ts
 import { http, auth } from "./http";
 
 /** ------------------ Types ------------------ */
@@ -14,6 +15,8 @@ export interface Transaction {
   date: string; // ISO
   description?: string;
   source: SourceType;
+  accountId?: string;   // 👈 make sure your backend saves this when ingesting Plaid
+  accountName?: string; // optional convenience for display
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +39,8 @@ export type TransactionsQuery = {
   endDate?: string;
   sortBy?: string;
   order?: "asc" | "desc";
+  accountId?: string;   // 👈 single account filter
+  accountIds?: string;  // 👈 multiple (csv: "id1,id2")
 };
 
 export interface CategoryStatRow {
@@ -47,7 +52,7 @@ export interface CategoryStatRow {
 }
 
 export interface SummaryPoint {
-  period: string; // e.g. 2025-08 or 2025-08-07
+  period: string;
   income: number;
   expense: number;
   net: number;
@@ -65,7 +70,6 @@ export const fetchTransactions = async (
   token: string,
   params: TransactionsQuery = {}
 ): Promise<PagedTransactionsResponse> => {
-  // Build clean querystring (no null/undefined)
   const entries = Object.entries(params).filter(
     ([, v]) => v !== undefined && v !== null && v !== ""
   ) as [string, string][];
@@ -90,7 +94,9 @@ export const addTransaction = async (
 export const updateTransaction = async (
   token: string,
   id: string,
-  data: Partial<Pick<Transaction, "type" | "category" | "amount" | "date" | "description">>
+  data: Partial<
+    Pick<Transaction, "type" | "category" | "amount" | "date" | "description" | "accountId" | "accountName">
+  >
 ) => {
   const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
   return res.data;
@@ -98,14 +104,17 @@ export const updateTransaction = async (
 
 // Delete a transaction
 export const deleteTransaction = async (token: string, id: string) => {
-  const res = await http.delete<{ message: string; id: string }>(`/api/transactions/${id}`, auth(token));
+  const res = await http.delete<{ message: string; id: string }>(
+    `/api/transactions/${id}`,
+    auth(token)
+  );
   return res.data;
 };
 
-// Category stats
+// Category stats (✅ now supports accountId/accountIds)
 export const fetchCategoryStats = async (
   token: string,
-  params: { startDate?: string; endDate?: string } = {},
+  params: { startDate?: string; endDate?: string; accountId?: string; accountIds?: string } = {},
   signal?: AbortSignal
 ): Promise<CategoryStatRow[]> => {
   const { data } = await http.get<CategoryStatRow[]>("/api/transactions/stats", {
@@ -116,10 +125,16 @@ export const fetchCategoryStats = async (
   return data;
 };
 
-// Time-series summary (income/expense/net)
+// Time-series summary (✅ now supports accountId/accountIds)
 export const fetchSummary = async (
   token: string,
-  params: { granularity: Granularity; startDate?: string; endDate?: string },
+  params: {
+    granularity: Granularity;
+    startDate?: string;
+    endDate?: string;
+    accountId?: string;
+    accountIds?: string;
+  },
   signal?: AbortSignal
 ): Promise<SummaryResponse> => {
   const { data } = await http.get<SummaryResponse>("/api/transactions/summary", {

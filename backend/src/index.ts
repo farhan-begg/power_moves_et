@@ -9,6 +9,7 @@ import authRoutes from "./routes/authRoutes";
 import manualAssetRoutes from "./routes/manualAssetRoutes";
 import positionsRoutes from "./routes/positionsRoutes";
 import adviceRoutes from "./routes/adviceRoutes";
+
 dotenv.config();
 
 const app = express();
@@ -27,8 +28,8 @@ app.use(
   })
 );
 
-// Request logger (safe: logs parsed body only)
-app.use((req, _res, next) => {
+// Request logger (typed)
+app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log("📝 Request:", req.method, req.url);
   if (req.body && Object.keys(req.body).length > 0) {
     console.log("📝 Parsed Body:", req.body);
@@ -39,33 +40,40 @@ app.use((req, _res, next) => {
 /* ---------- Routes ---------- */
 app.use("/api/auth", authRoutes);
 app.use("/api/transactions", transactionRoutes);
-app.use("/api/stocks", positionsRoutes); // 👈 CORRECT mount
+app.use("/api/stocks", positionsRoutes);
 app.use("/api/plaid", plaidRoutes);
 app.use("/api/manual-assets", manualAssetRoutes);
 app.use("/api/advice", adviceRoutes);
+
 // Health root
-app.get("/", (_req, res) => {
+app.get("/", (_req: Request, res: Response) => {
   res.send("🚀 Expense Tracker Backend is Running!");
 });
 
 /* ---------- 404 + Error Handlers ---------- */
 // 404 for unknown API routes (after all routers)
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "Route not found", path: req.path });
   }
   next();
 });
 
-// Central error handler (so thrown errors don't look like 404s)
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+// Central error handler
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  const message = err instanceof Error ? err.message : "Server error";
   console.error("💥 Unhandled error:", err);
-  res.status(err?.status || 500).json({ error: err?.message || "Server error" });
+  res.status(500).json({ error: message });
 });
 
 /* ---------- Mongo + Start ---------- */
+const mongoUri = process.env.MONGO_URI;
+if (!mongoUri) {
+  throw new Error("MONGO_URI is not set in environment");
+}
+
 mongoose
-  .connect(process.env.MONGO_URI as string)
+  .connect(mongoUri)
   .then(() => {
     console.log("✅ MongoDB Connected");
     app.listen(PORT, () => {
@@ -76,3 +84,5 @@ mongoose
     console.error("❌ MongoDB connection error:", err);
     process.exit(1);
   });
+
+export default app;
