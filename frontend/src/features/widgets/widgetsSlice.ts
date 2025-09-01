@@ -14,7 +14,8 @@ export type WidgetType =
   | "cards"
   | "investments"
   | "stocks-portfolio"
-  | "advice";                      // 👈 added
+  | "advice"
+  | "goals"; // 👈 added
 
 export type WidgetSize = "sm" | "lg";
 
@@ -47,15 +48,18 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w10: { id: "w10", type: "cards",                title: "Credit Cards",        size: "sm" },
   w11: { id: "w11", type: "investments",          title: "Investments",         size: "sm" },
   w12: { id: "w12", type: "stocks-portfolio",     title: "Stocks & ETFs",       size: "sm" },
-  w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" }, // 👈 new default
+  w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" },
+  w14: { id: "w14", type: "goals",                title: "Goals",               size: "sm" }, // 👈 new default
 };
 
 export const DEFAULT_ORDER = [
-  "w1","w2", "w3", "w4", "w8",
-  "w5", "w7",
-  "w9", "w12",
-  "w10", "w11",
-  "w13",                              // 👈 place Advice at the end (or wherever you like)
+  "w1","w2","w3","w4",
+  "w8",          // Net Worth
+  "w14",         // 👈 Goals (placed near Net Worth)
+  "w5","w7",
+  "w9","w12",
+  "w10","w11",
+  "w13",
 ];
 
 const initialState: WidgetsState = {

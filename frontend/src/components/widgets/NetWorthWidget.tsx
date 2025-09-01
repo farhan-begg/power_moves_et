@@ -10,7 +10,13 @@
 //   return json;
 // });
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/hooks";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
@@ -25,6 +31,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
+import type { PlaidAccount } from "../../types/plaid";
+
 
 type ManualAsset = {
   _id: string;
@@ -74,14 +82,17 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
   const selectedAccountId = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
   const token = useSelector((s: RootState) => s.auth.token);
 
-  // Also fetch Plaid accounts (same as your Transactions widget) so we can render the name/mask
+  // Accounts for label rendering
   const { data: accountsRaw } = useQuery<any>({
     queryKey: ["accounts"],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
+placeholderData: (
+  p: PlaidAccount[] | { accounts: PlaidAccount[] } | undefined
+) => p ?? ([] as PlaidAccount[]),
   });
 
-  // Normalize accounts to a flat array with id/name/mask/etc.
   const accounts = useMemo(() => {
     const raw = accountsRaw as any;
     if (Array.isArray(raw)) return raw;
@@ -89,7 +100,6 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     return [];
   }, [accountsRaw]);
 
-  // Build a friendly label for the selected account
   const selectedAccountLabel = useMemo(() => {
     if (!selectedAccountId) return "";
     const a =
@@ -99,7 +109,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
           x.accountId === selectedAccountId ||
           x.id === selectedAccountId
       ) || null;
-    if (!a) return selectedAccountId; // fallback
+    if (!a) return selectedAccountId;
     const base = a.name || a.official_name || a.subtype || "Account";
     const mask = a.mask ? ` ••••${String(a.mask).slice(-4)}` : "";
     return `${base}${mask}`;
@@ -116,32 +126,36 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
   const [saving, setSaving] = useState(false);
   const [errLocal, setErrLocal] = useState<string | null>(null);
 
-  // Forms
-  const [txnForm, setTxnForm] = useState<ManualTxnForm>({
-    type: "expense",
-    category: "Manual",
-    amount: "",
-    description: "",
-    date: new Date().toISOString().slice(0, 10),
-  });
+  // Keep last good net worth to avoid flicker during refetch
+  const [lastNetWorth, setLastNetWorth] = useState<typeof netWorth | null>(null);
+  useEffect(() => {
+    if (netWorth) setLastNetWorth(netWorth);
+  }, [netWorth]);
 
-  const [assetForm, setAssetForm] = useState<ManualAssetForm>({
-    name: "",
-    type: "security",
-    value: "",
-    currency: "USD",
-    notes: "",
-    asOf: new Date().toISOString().slice(0, 10),
-  });
-
-  const [editId, setEditId] = useState<string | null>(null);
-
-  // Always respect the global filter: if selectedAccountId exists, pass it to the thunk
+  // Debounced refresh (prevents rapid flashes when switching accounts quickly)
   const refresh = useCallback(() => {
     return dispatch(
       fetchNetWorth(selectedAccountId ? { accountId: selectedAccountId } : undefined as any)
     );
   }, [dispatch, selectedAccountId]);
+
+  const refreshTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (refreshTimer.current) {
+      window.clearTimeout(refreshTimer.current);
+      refreshTimer.current = null;
+    }
+    refreshTimer.current = window.setTimeout(() => {
+      refresh();
+      refreshTimer.current = null;
+    }, 120);
+    return () => {
+      if (refreshTimer.current) {
+        window.clearTimeout(refreshTimer.current);
+        refreshTimer.current = null;
+      }
+    };
+  }, [refresh]);
 
   const loadAssets = useCallback(async () => {
     if (!jwt) return;
@@ -151,19 +165,14 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     setAssets(data);
   }, [authHeaders, jwt]);
 
-  // initial load
+  // Initial load
   useEffect(() => {
     if (!netWorth && !loading) refresh();
     loadAssets().catch((e) => setErrLocal(e?.message ?? "Failed to load manual assets"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // refetch whenever the global account filter changes
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // auto-refetch on mutations
+  // Auto-refetch on mutations
   useEffect(() => {
     const onChanged = () => refresh();
     window.addEventListener("data:transactions:changed", onChanged);
@@ -290,20 +299,44 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     setUiOpen("add-asset");
   };
 
-  // ----- derived -----
-  const currencyHint = netWorth?.currencyHint || "USD";
-  const assetsSum = netWorth?.summary.assets ?? 0;
-  const debts = netWorth?.summary.debts ?? 0;
-  const net = netWorth?.summary.netWorth ?? 0;
+  // ----- forms -----
+  const [txnForm, setTxnForm] = useState<ManualTxnForm>({
+    type: "expense",
+    category: "Manual",
+    amount: "",
+    description: "",
+    date: new Date().toISOString().slice(0, 10),
+  });
+
+  const [assetForm, setAssetForm] = useState<ManualAssetForm>({
+    name: "",
+    type: "security",
+    value: "",
+    currency: "USD",
+    notes: "",
+    asOf: new Date().toISOString().slice(0, 10),
+  });
+
+  const [editId, setEditId] = useState<string | null>(null);
+
+  // ----- derived numbers (use last good while refreshing) -----
+  const show = netWorth ?? lastNetWorth;
+  const isInitialLoading = loading && !lastNetWorth;
+  const isRefreshing = loading && !!lastNetWorth;
+
+  const currencyHint = show?.currencyHint || "USD";
+  const assetsSum = show?.summary.assets ?? 0;
+  const debts = show?.summary.debts ?? 0;
+  const net = show?.summary.netWorth ?? 0;
   const netPositive = net >= 0;
 
   const base = Math.max(assetsSum + Math.abs(debts), 0);
   const debtPct = base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
 
   // ----- render -----
-  if (loading) return <NetWorthSkeleton className={className} />;
+  if (isInitialLoading) return <NetWorthSkeleton className={className} />;
 
-  if (error) {
+  if (error && !show) {
     return (
       <Card className={className}>
         <div className="flex items-baseline justify-between">
@@ -327,7 +360,12 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
   }
 
   return (
-    <Card className={className}>
+    <Card
+      className={[
+        className,
+        isRefreshing ? "transition-opacity duration-150 opacity-[0.88]" : "opacity-100",
+      ].join(" ")}
+    >
       {/* soft glow */}
       <Glow positive={netPositive} />
 
@@ -341,14 +379,19 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
           )}
         </div>
 
-        <button
-          onClick={refresh}
-          className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
-          aria-label="Refresh net worth"
-        >
-          <ArrowPathIcon className="h-4 w-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {isRefreshing && (
+            <ArrowPathIcon className="h-4 w-4 animate-spin text-white/70" aria-label="Refreshing" />
+          )}
+          <button
+            onClick={refresh}
+            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+            aria-label="Refresh net worth"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Big net number */}
@@ -475,9 +518,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
             <Field className="md:col-span-2">
               <Label>Description</Label>
               <Input
-                placeholder={
-                  txnForm.type === "income" ? "e.g., Cash tip from client" : "e.g., Lunch"
-                }
+                placeholder={txnForm.type === "income" ? "e.g., Cash tip from client" : "e.g., Lunch"}
                 value={txnForm.description}
                 onChange={(e) => setTxnForm((f) => ({ ...f, description: e.target.value }))}
               />
@@ -954,7 +995,7 @@ function Textarea({ className = "", ...props }: TextareaProps) {
     <textarea
       {...props}
       className={[
-        "min-h[72px] w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10",
+        "min-h-[72px] w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10",
         "focus:outline-none focus:ring-white/20",
         className,
       ].join(" ")}

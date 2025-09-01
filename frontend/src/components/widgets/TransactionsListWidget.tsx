@@ -2,7 +2,7 @@
 import React from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
 import {
   fetchTransactions,
@@ -68,7 +68,7 @@ function presetRange(p: Preset) {
     case "1y": {
       const s = new Date(today);
       s.setFullYear(s.getFullYear() - 1);
-      s.setDate(s.getDate() + 1); // include today
+      s.setDate(s.getDate() + 1);
       return { startDate: toISO(s), endDate };
     }
     case "custom":
@@ -77,30 +77,54 @@ function presetRange(p: Preset) {
   }
 }
 
+// accept only real Plaid ids; anything else means "All"
+const isRealAccountId = (v?: string | null) =>
+  !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
+
 export default function TransactionsListWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
-  const selectedAccountId = useSelector(
-    (s: RootState) => s.accountFilter.selectedAccountId
-  ); // <-- GLOBAL filter
 
-  // local filters
+  // Global account filter from Redux (could be "__all__")
+  const selectedAccountIdRaw = useSelector(
+    (s: RootState) => s.accountFilter.selectedAccountId
+  );
+
+  // Normalize to undefined = All accounts
+  const accountFilterId = React.useMemo(
+    () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
+    [selectedAccountIdRaw]
+  );
+
+  // Local filters
   const [filter, setFilter] = React.useState<Filter>("all");
   const [preset, setPreset] = React.useState<Preset>("30d");
+
+  // Applied date range that powers the query
   const init = React.useMemo(() => presetRange("30d"), []);
   const [startDate, setStartDate] = React.useState(init.startDate);
   const [endDate, setEndDate] = React.useState(init.endDate);
+
+  // Pending inputs for "custom" mode (edited but not yet applied)
+  const [pendingStart, setPendingStart] = React.useState(init.startDate);
+  const [pendingEnd, setPendingEnd] = React.useState(init.endDate);
+  const [dateError, setDateError] = React.useState<string | null>(null);
+
   const [page, setPage] = React.useState(1);
   const limit = 6;
 
-  // reset page when filters change
-  React.useEffect(() => setPage(1), [filter, startDate, endDate, selectedAccountId]);
+  // Reset page when high-level filters change
+  React.useEffect(() => setPage(1), [filter, startDate, endDate, accountFilterId]);
 
-  // update dates when preset changes (except custom)
+  // Update applied dates when preset changes (except custom)
   React.useEffect(() => {
     if (preset === "custom") return;
     const r = presetRange(preset);
     setStartDate(r.startDate);
     setEndDate(r.endDate);
+    // sync pending with applied
+    setPendingStart(r.startDate);
+    setPendingEnd(r.endDate);
+    setDateError(null);
   }, [preset]);
 
   // Accounts (used to display bank names beside rows)
@@ -109,7 +133,9 @@ export default function TransactionsListWidget() {
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
-    placeholderData: (p) => p as any,
+    placeholderData: keepPreviousData,  // v5 helper
+    refetchOnWindowFocus: false,
+    gcTime: 30 * 60 * 1000,
   });
 
   const accounts = React.useMemo<PlaidAccount[]>(() => {
@@ -121,8 +147,12 @@ export default function TransactionsListWidget() {
     return [];
   }, [accountsRaw]);
 
-  // Transactions (honors GLOBAL selectedAccountId)
-  const { data: txRes, isLoading, isError, isFetching } = useQuery<PagedTransactionsResponse>({
+  // Transactions (honors normalized GLOBAL account id)
+  const {
+    data: txRes,
+    isError,
+    isFetching,
+  } = useQuery<PagedTransactionsResponse>({
     queryKey: [
       "transactions",
       "list",
@@ -131,7 +161,7 @@ export default function TransactionsListWidget() {
       endDate,
       page,
       limit,
-      selectedAccountId, // <— react to global filter
+      accountFilterId ?? "ALL",
     ],
     queryFn: () =>
       fetchTransactions(token!, {
@@ -142,12 +172,15 @@ export default function TransactionsListWidget() {
         limit,
         sortBy: "date",
         order: "desc",
-        accountId: selectedAccountId || undefined, // <— send to backend
+        accountId: accountFilterId, // only when real
       }),
     enabled: !!token && !!(startDate && endDate),
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,  // v5 way to keep old data during refetch
+    refetchOnWindowFocus: false,
+    gcTime: 10 * 60 * 1000,
   });
 
+  // With v5 + keepPreviousData helper, types are preserved:
   const transactions: Transaction[] = txRes?.transactions ?? [];
   const total = txRes?.total ?? 0;
   const pages = txRes?.pages ?? 1;
@@ -156,8 +189,9 @@ export default function TransactionsListWidget() {
     const m = new Map<string, string>();
     accounts.forEach((a) => {
       const id = a.account_id || a.accountId || a.id;
-      const label = a.name || a.official_name || a.subtype || "Account";
-      if (id) m.set(id, label);
+      const base = a.name || a.official_name || a.subtype || "Account";
+      const mask = a.mask ? ` ••••${String(a.mask).slice(-4)}` : "";
+      if (id) m.set(id, `${base}${mask}`);
     });
     return m;
   }, [accounts]);
@@ -199,6 +233,24 @@ export default function TransactionsListWidget() {
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
+  // Apply / Reset for custom range
+  const applyCustomRange = () => {
+    if (!pendingStart || !pendingEnd) return;
+    if (pendingStart > pendingEnd) {
+      setDateError("Start date must be before or equal to End date.");
+      return;
+    }
+    setDateError(null);
+    setStartDate(pendingStart);
+    setEndDate(pendingEnd);
+  };
+
+  const resetCustomRange = () => {
+    setPendingStart(startDate);
+    setPendingEnd(endDate);
+    setDateError(null);
+  };
+
   return (
     <div className={glass}>
       {/* Header + controls */}
@@ -207,22 +259,29 @@ export default function TransactionsListWidget() {
           <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
           <div className="text-xs text-white/60">
             {startDate} → {endDate}
-            {isFetching && <span className="ml-2 text-white/40">(updating…)</span>}
           </div>
-          {selectedAccountId && (
+          {accountFilterId ? (
             <div className="mt-1 text-[11px] text-white/60">
-              Account: <span className="text-white">
-                {accMap.get(selectedAccountId) || "Selected account"}
-              </span>
+              Account: <span className="text-white">{accMap.get(accountFilterId) || "Selected account"}</span>
             </div>
+          ) : (
+            <div className="mt-1 text-[11px] text-white/40">All accounts</div>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Type pills */}
-          <FilterPill label="All" value="all" />
-          <FilterPill label="Spending" value="expense" />
-          <FilterPill label="Income" value="income" />
+        <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterPill label="All" value="all" />
+            <FilterPill label="Spending" value="expense" />
+            <FilterPill label="Income" value="income" />
+          </div>
+
+          {/* Subtle updating chip (no layout jump) */}
+          {isFetching && (
+            <div className="ml-2 text-[11px] px-2 py-1 rounded-full bg-white/5 ring-1 ring-white/10 text-white/60">
+              Updating…
+            </div>
+          )}
         </div>
       </div>
 
@@ -248,41 +307,58 @@ export default function TransactionsListWidget() {
             <input
               type="date"
               className="rounded-md bg-white/10 px-2 py-1.5 text-xs text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={pendingStart}
+              onChange={(e) => setPendingStart(e.target.value)}
             />
             <span className="text-white/50 text-xs">to</span>
             <input
               type="date"
               className="rounded-md bg-white/10 px-2 py-1.5 text-xs text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={pendingEnd}
+              onChange={(e) => setPendingEnd(e.target.value)}
             />
+
+            <button
+              onClick={applyCustomRange}
+              disabled={!pendingStart || !pendingEnd}
+              className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-40"
+            >
+              Apply
+            </button>
+            <button
+              onClick={resetCustomRange}
+              className="inline-flex items-center gap-2 rounded-lg bg-transparent px-2.5 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+              title="Reset to applied dates"
+            >
+              Reset
+            </button>
+
+            {dateError && <span className="text-[11px] text-rose-300 ml-2">{dateError}</span>}
           </div>
         )}
       </div>
 
-      {/* Loading / error states */}
-      {isLoading && <p className="text-white/70">Loading…</p>}
+      {/* Error */}
       {isError && <p className="text-rose-300">Failed to load transactions.</p>}
 
       {/* Empty state */}
-      {!isLoading && !isError && transactions.length === 0 && (
+      {!isError && transactions.length === 0 && (
         <div className="text-white/70">
           No results for <b>{filter === "all" ? "all types" : filter}</b>
-          {selectedAccountId && (
-            <>
-              {" "}in <b>{accMap.get(selectedAccountId) || "selected account"}</b>
-            </>
-          )}
-          {" "}between <b>{startDate}</b> and <b>{endDate}</b>.
+          {accountFilterId && (
+            <> in <b>{accMap.get(accountFilterId) || "selected account"}</b></>
+          )}{" "}
+          between <b>{startDate}</b> and <b>{endDate}</b>.
         </div>
       )}
 
-      {/* Results */}
-      {!isLoading && !isError && transactions.length > 0 && (
+      {/* Results (keep rendering while fetching) */}
+      {!isError && transactions.length > 0 && (
         <>
-          <ul className="divide-y divide-white/10">
+          <ul
+            className="divide-y divide-white/10 transition-opacity duration-150"
+            style={{ opacity: isFetching ? 0.85 : 1 }}
+          >
             {transactions.map((t) => {
               const bank = bankNameFor(t);
               const isExpense = t.type === "expense";
@@ -341,7 +417,7 @@ export default function TransactionsListWidget() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
+                disabled={page <= 1 || isFetching}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/80 disabled:opacity-40"
               >
                 <ChevronLeftIcon className="h-4 w-4" />
@@ -352,7 +428,7 @@ export default function TransactionsListWidget() {
               </div>
               <button
                 onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                disabled={page >= pages}
+                disabled={page >= pages || isFetching}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/80 disabled:opacity-40"
               >
                 Next

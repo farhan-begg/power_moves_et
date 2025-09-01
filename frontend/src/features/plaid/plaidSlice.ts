@@ -68,15 +68,20 @@ export const fetchInvestments = createAsyncThunk<InvestmentsResponse>(
 export const fetchNetWorth = createAsyncThunk(
   "plaid/netWorth",
   async ({ accountId }: { accountId?: string } = {}) => {
-    const url = new URL(`${API}/net-worth`);
-    if (accountId) url.searchParams.set("accountId", accountId);   // 👈 IMPORTANT
-    const res = await fetch(url.toString(), { headers: authHeaders() });
+    const token = localStorage.getItem("token") ?? "";
+    const url = new URL("http://localhost:5000/api/plaid/net-worth");
+
+    // ✅ Only set when it's a specific account, not "all"/"__all__"/empty/undefined/null
+    if (accountId && !["all", "__all__", "undefined", "null", ""].includes(String(accountId))) {
+      url.searchParams.set("accountId", accountId);
+    }
+
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to fetch net worth");
-    return json; // { summary, breakdownByType, currencyHint, ... }
+    return json;
   }
 );
-
 
 const initialState: PlaidState = {
   accounts: [],
@@ -124,12 +129,20 @@ const slice = createSlice({
     });
     b.addCase(fetchInvestments.rejected, fail);
 
-    b.addCase(fetchNetWorth.pending, start);
-    b.addCase(fetchNetWorth.fulfilled, (s, a) => {
-      s.loading = false;
-      s.netWorth = a.payload;
+    b.addCase(fetchNetWorth.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+      // ❌ don't wipe state.netWorth here; keep previous data to avoid flicker
+    })
+    b.addCase(fetchNetWorth.fulfilled, (state, action) => {
+      state.loading = false;
+      state.netWorth = action.payload;
+    })
+      b.addCase(fetchNetWorth.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.error.message || "Failed to fetch net worth";
+      // keep last good state.netWorth
     });
-    b.addCase(fetchNetWorth.rejected, fail);
   },
 });
 

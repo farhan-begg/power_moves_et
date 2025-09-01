@@ -99,11 +99,23 @@ type PlaidAccount = {
   mask?: string | null;
 };
 
+// helper: only accept real Plaid account ids
+const isRealAccountId = (v?: string | null) =>
+  !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
+
 export default function IncomeExpenseChartWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
-  const selectedAccountId = useSelector(
+
+  // global selection from Redux
+  const selectedAccountIdRaw = useSelector(
     (s: RootState) => s.accountFilter.selectedAccountId
-  ); // <-- GLOBAL filter
+  );
+
+  // normalize -> undefined means “All accounts”
+  const accountFilterId = React.useMemo(
+    () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
+    [selectedAccountIdRaw]
+  );
 
   const [granularity, setGranularity] = React.useState<Granularity>("month");
   const [preset, setPreset] = React.useState<Preset>("90d");
@@ -112,7 +124,7 @@ export default function IncomeExpenseChartWidget() {
 
   const range = React.useMemo(() => presetToRange(preset), [preset]);
 
-  // Accounts (for label display)
+  // Accounts for label display
   const { data: accountsRaw } = useQuery<PlaidAccount[] | { accounts: PlaidAccount[] }>({
     queryKey: ["accounts"],
     queryFn: () => fetchPlaidAccounts(token!),
@@ -138,19 +150,14 @@ export default function IncomeExpenseChartWidget() {
     return m;
   }, [accounts]);
 
-  const {
-    data,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [
       "summary",
       granularity,
       preset,
       range.startDate ?? null,
       range.endDate ?? null,
-      selectedAccountId ?? "", // <— react to global filter
+      accountFilterId ?? "ALL",
     ],
     queryFn: ({ signal }) =>
       fetchSummary(
@@ -159,7 +166,7 @@ export default function IncomeExpenseChartWidget() {
           granularity,
           ...(range.startDate ? { startDate: range.startDate } : {}),
           ...(range.endDate ? { endDate: range.endDate } : {}),
-          ...(selectedAccountId ? { accountId: selectedAccountId } : {}), // <— pass to backend
+          ...(accountFilterId ? { accountId: accountFilterId } : {}), // only pass if real
         },
         signal
       ),
@@ -167,7 +174,7 @@ export default function IncomeExpenseChartWidget() {
     placeholderData: (p) => p as any,
   });
 
-  // 🔁 Auto-refetch when other widgets broadcast data changes
+  // 🔁 Auto-refetch on external changes
   React.useEffect(() => {
     const onChanged = () => refetch();
     window.addEventListener("data:transactions:changed", onChanged);
@@ -265,9 +272,9 @@ export default function IncomeExpenseChartWidget() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
-          {selectedAccountId && (
+          {accountFilterId && (
             <div className="text-[11px] text-white/60">
-              Account: <span className="text-white">{accMap.get(selectedAccountId) || "Selected account"}</span>
+              Account: <span className="text-white">{accMap.get(accountFilterId) || "Selected account"}</span>
             </div>
           )}
         </div>
