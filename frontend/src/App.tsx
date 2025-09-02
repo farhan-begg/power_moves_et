@@ -5,11 +5,13 @@ import Dashboard from "./pages/Dashboard";
 
 import AlreadyAuthRedirect from "./components/AlreadyAuthRedirect";
 import ProtectedRoute from "./components/ProtectRoute";
+import Landing from "./pages/Landing";
 
 export default function App() {
   return (
     <Router>
       <Routes>
+              <Route path="/" element={<Landing />} />
         <Route
           path="/login"
           element={

@@ -1,3 +1,4 @@
+// server/models/ManualAsset.ts
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface ManualAssetDoc extends Document {
@@ -8,6 +9,11 @@ export interface ManualAssetDoc extends Document {
   currency: string;
   notes?: string;
   asOf: Date;
+
+  // NEW: scoping
+  accountScope: "global" | "account";   // default: global
+  accountId?: string | null;            // present when account-scoped
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +27,10 @@ const ManualAssetSchema = new Schema<ManualAssetDoc>(
     currency: { type: String, default: "USD" },
     notes: { type: String },
     asOf: { type: Date, default: Date.now },
+
+    // NEW: scope (global by default)
+    accountScope: { type: String, enum: ["global", "account"], default: "global", index: true },
+    accountId: { type: String, default: null, index: true },
   },
   { timestamps: true }
 );

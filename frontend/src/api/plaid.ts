@@ -88,3 +88,18 @@ export const fetchInvestments = async (token: string): Promise<{
   return data;
 };
 
+
+export async function syncPlaidTransactions(
+  token: string,
+  opts?: { accountId?: string; accountIds?: string[] }
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (opts?.accountId) params.set("accountId", opts.accountId);
+  if (opts?.accountIds?.length) params.set("accountIds", opts.accountIds.join(","));
+
+  const url = `/api/plaid/transactions${params.toString() ? `?${params}` : ""}`;
+
+  const { data } = await http.get(url, auth(token));
+  // your backend returns an array; normalize just in case
+  return Array.isArray(data) ? data : (data?.transactions ?? []);
+}

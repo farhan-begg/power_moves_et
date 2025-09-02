@@ -77,11 +77,13 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
   const [form, setForm] = useState({ name: "", type: "savings", targetAmount: "", currency: "USD" });
   const onCreate = async () => {
     if (!form.name || !form.targetAmount) return;
+    const amt = Number(form.targetAmount);
+    if (!isFinite(amt) || amt <= 0) return;
     await mCreate.mutateAsync({
-      name: form.name,
+      name: form.name.trim(),
       type: form.type as Goal["type"],
-      targetAmount: Number(form.targetAmount),
-      currency: form.currency || "USD",
+      targetAmount: amt,
+      currency: (form.currency || "USD").toUpperCase(),
     });
     setForm({ name: "", type: "savings", targetAmount: "", currency: "USD" });
   };
@@ -90,7 +92,17 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string>("");
 
-  /* -------------------- Totals & glow mood -------------------- */
+  /* -------------------- Custom contrib -------------------- */
+  const [customAmt, setCustomAmt] = useState<Record<string, string>>({});
+  const commitCustom = async (g: Goal) => {
+    const raw = customAmt[g._id] ?? "";
+    const val = Number(raw);
+    if (!isFinite(val) || val <= 0) return;
+    await mAddContrib.mutateAsync({ id: g._id, amount: val });
+    setCustomAmt((s) => ({ ...s, [g._id]: "" }));
+  };
+
+  /* -------------------- Totals -------------------- */
   const totals = useMemo(() => {
     const actives = goals.filter((g) => g.status === "active" && g.type !== "spending_limit");
     const saved = actives.reduce((s, g) => s + (g.currentAmount || 0), 0);
@@ -151,13 +163,11 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
               value={form.targetAmount}
               onChange={(e) => setForm({ ...form, targetAmount: e.target.value })}
               onBlur={() =>
-                setForm((f) => ({
-                  ...f,
-                  targetAmount:
-                    f.targetAmount && isFinite(Number(f.targetAmount))
-                      ? Number(f.targetAmount).toFixed(2)
-                      : f.targetAmount,
-                }))
+                setForm((f) => {
+                  if (!f.targetAmount) return f;
+                  const n = Number(f.targetAmount);
+                  return isFinite(n) && n > 0 ? { ...f, targetAmount: n.toFixed(2) } : f;
+                })
               }
               prefix="$"
               aria-invalid={
@@ -203,6 +213,7 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
 
           return (
             <div key={g._id} className="rounded-xl border border-white/10 bg-white/5 p-3 ring-1 ring-white/10">
+              {/* Header */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -221,7 +232,7 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
                     </span>
                   </div>
                   <div className="text-[11px] text-white/60 mt-0.5">
-                    {g.type.replace("_", " ")} • {g.currency}
+                    {g.type.replace(/_/g, " ")} • {g.currency}
                   </div>
                 </div>
 
@@ -250,6 +261,15 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
                         className="w-28 rounded-md bg-white/10 px-2 py-1 text-xs text-white ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white/25"
                         value={editTarget}
                         onChange={(e) => setEditTarget(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const val = Number(editTarget);
+                            if (isFinite(val) && val > 0) {
+                              mPatch.mutate({ id: g._id, patch: { targetAmount: val } });
+                              setEditingId(null);
+                            }
+                          }
+                        }}
                       />
                       <IconBtn
                         title="Save"
@@ -271,7 +291,7 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
                 </div>
               </div>
 
-              {/* Progress bar (glass) */}
+              {/* Progress */}
               <div className="mt-2">
                 <div className="h-2 w-full rounded-full bg-white/10">
                   <div className="h-2 rounded-full bg-emerald-400/70" style={{ width: `${pct}%` }} />
@@ -284,22 +304,63 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
               {/* Quick actions */}
               {g.type !== "spending_limit" && g.status !== "completed" && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Btn onClick={() => mAddContrib.mutate({ id: g._id, amount: 100 })}>
-                    +100
-                  </Btn>
-                  <Btn onClick={() => mAddContrib.mutate({ id: g._id, amount: 500 })}>
-                    +500
-                  </Btn>
+                  <Btn onClick={() => mAddContrib.mutate({ id: g._id, amount: 100 })}>+100</Btn>
+                  <Btn onClick={() => mAddContrib.mutate({ id: g._id, amount: 500 })}>+500</Btn>
+
+                  {/* Custom amount */}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      prefix="$"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={customAmt[g._id] ?? ""}
+                      onChange={(e) => setCustomAmt((s) => ({ ...s, [g._id]: e.target.value }))}
+                      onBlur={() =>
+                        setCustomAmt((s) => {
+                          const v = s[g._id];
+                          if (!v) return s;
+                          const n = Number(v);
+                          return isFinite(n) && n > 0 ? { ...s, [g._id]: n.toFixed(2) } : s;
+                        })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitCustom(g);
+                      }}
+                      aria-invalid={
+                        customAmt[g._id] &&
+                        (!isFinite(Number(customAmt[g._id])) || Number(customAmt[g._id]) <= 0)
+                          ? true
+                          : undefined
+                      }
+                      className="w-28"
+                    />
+                    <Btn
+                      onClick={() => commitCustom(g)}
+                      disabled={
+                        mAddContrib.isPending ||
+                        !customAmt[g._id] ||
+                        !isFinite(Number(customAmt[g._id])) ||
+                        Number(customAmt[g._id]) <= 0
+                      }
+                    >
+                      Add
+                    </Btn>
+                  </div>
                 </div>
               )}
 
               {/* Spending limit helpers */}
               {g.type === "spending_limit" && (
                 <div className="mt-2 text-sm flex flex-wrap items-center gap-2 text-white/80">
-                  <span>Spent: <b className="text-white">{money(g.currentAmount, g.currency)}</b></span>
+                  <span>
+                    Spent: <b className="text-white">{money(g.currentAmount, g.currency)}</b>
+                  </span>
                   <span>•</span>
                   <span>
-                    Remaining: <b className="text-white">{money(Math.max(0, g.targetAmount - g.currentAmount), g.currency)}</b>
+                    Remaining:{" "}
+                    <b className="text-white">
+                      {money(Math.max(0, g.targetAmount - g.currentAmount), g.currency)}
+                    </b>
                   </span>
                   <Btn kind="ghost" className="ml-auto" onClick={() => mRollover.mutate(g._id)}>
                     Rollover
@@ -311,7 +372,7 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
         })}
       </div>
 
-      {/* Totals pill row */}
+      {/* Totals */}
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Pill label="Saved (active)" value={money(totals.saved, totals.currency)} kind="positive" />
         <Pill label="Remaining to targets" value={money(totals.remaining, totals.currency)} kind="neutral" />

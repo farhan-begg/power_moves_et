@@ -3,7 +3,7 @@ import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPlaidAccounts, type PlaidAccount } from "../../api/plaid";
+import { fetchPlaidAccounts } from "../../api/plaid";
 import { fetchNetWorth } from "../../api/plaid";
 import {
   fetchTransactions,
@@ -12,14 +12,13 @@ import {
 } from "../../api/transaction";
 import { ArrowUpRightIcon, ArrowDownRightIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { setSelectedAccountId } from "../../features/filters/globalAccountFilterSlice";
+import { toIsoStartEndExclusive } from "../../helpers/date";
 
 type Props = {
   title: string;
-  range: { startDate: string; endDate: string };
+  range: { startDate: string; endDate: string }; // local YYYY-MM-DD (inclusive)
   className?: string;
-  /** cashflow = uses /api/transactions (filtered); networth = uses /api/plaid/net-worth (always global/all) */
   mode?: "cashflow" | "networth";
-  /** set true if you want a per-card selector (writes to global filter) */
   showAccountSelect?: boolean;
 };
 
@@ -31,11 +30,42 @@ type AccountLike = {
   accountId?: string;
   name?: string;
   official_name?: string | null;
-  officialName?: string | null; // some codepaths use this
+  officialName?: string | null;
   mask?: string | null;
   type?: string | null;
   subtype?: string | null;
 };
+
+/* ----------------- Date helpers ----------------- */
+function ymdToLocalDate(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, (m as number) - 1, d, 0, 0, 0, 0);
+}
+function localTodayYMD() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function addDaysYMD(ymd: string, days: number) {
+  const d = ymdToLocalDate(ymd);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+/** If end looks like “tomorrow” vs local today, shift both back one day. */
+function normalizeLocalRange(r: { startDate: string; endDate: string }) {
+  const today = ymdToLocalDate(localTodayYMD());
+  const end = ymdToLocalDate(r.endDate);
+  const diffDays = Math.round((+end - +today) / 86400000);
+  return diffDays === 1
+    ? { startDate: addDaysYMD(r.startDate, -1), endDate: addDaysYMD(r.endDate, -1) }
+    : r;
+}
 
 export default function StatCard({
   title,
@@ -46,6 +76,23 @@ export default function StatCard({
 }: Props) {
   const token = useSelector((s: RootState) => s.auth.token)!;
   const selectedAccountId = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+
+  // Normalize potential UTC off-by-one in the incoming props
+  const effectiveRange = React.useMemo(
+    () => normalizeLocalRange(range),
+    [range.startDate, range.endDate]
+  );
+
+  // Convert local YMD → ISO start / ISO end(exclusive) to match backend
+  const { startISO, endExclusiveISO } = React.useMemo(() => {
+    if (!effectiveRange.startDate || !effectiveRange.endDate) {
+      return { startISO: undefined, endExclusiveISO: undefined } as {
+        startISO?: string;
+        endExclusiveISO?: string;
+      };
+    }
+    return toIsoStartEndExclusive(effectiveRange.startDate, effectiveRange.endDate);
+  }, [effectiveRange.startDate, effectiveRange.endDate]);
 
   // ---- Accounts (for labeling the dropdown if you enable it) ----
   const { data: accountsRaw, isLoading: loadingAccounts } = useQuery<
@@ -66,36 +113,54 @@ export default function StatCard({
   }, [accountsRaw]);
 
   // ---------- DATA QUERIES ----------
-  // A) Cashflow: transactions, includes global account filter
+  // CASHFLOW: send ISO start + ISO end-exclusive
   const txQuery = useQuery<PagedTransactionsResponse>({
     queryKey: [
       "stats",
       "cashflow",
       title,
-      range.startDate,
-      range.endDate,
-      selectedAccountId, // <— global filter drives refetch
+      startISO ?? "",
+      endExclusiveISO ?? "",
+      selectedAccountId || "",
     ],
     queryFn: () =>
       fetchTransactions(token, {
-        ...range,
+        startDate: startISO,
+        endDate: endExclusiveISO, // EXCLUSIVE end (matches backend)
         page: 1,
         limit: 1000,
         sortBy: "date",
         order: "desc",
-        accountId: selectedAccountId || undefined, // "" => all
+        accountId: selectedAccountId || undefined,
       }),
-    enabled: !!token && mode === "cashflow",
+    enabled: !!token && mode === "cashflow" && !!startISO && !!endExclusiveISO,
     placeholderData: (prev) => prev as any,
+    refetchOnWindowFocus: true,
   });
 
-  // B) Net worth: single call (always overall; no account filter)
+  // Refetch when global data changes
+  React.useEffect(() => {
+    if (mode !== "cashflow") return;
+    const handler = () => txQuery.refetch();
+    window.addEventListener("data:transactions:changed", handler);
+    window.addEventListener("data:networth:changed", handler);
+    window.addEventListener("data:manualassets:changed", handler);
+    return () => {
+      window.removeEventListener("data:transactions:changed", handler);
+      window.removeEventListener("data:networth:changed", handler);
+      window.removeEventListener("data:manualassets:changed", handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, startISO, endExclusiveISO, selectedAccountId]);
+
+  // NET WORTH (kept simple; overall)
   const nwQuery = useQuery({
     queryKey: ["stats", "networth"],
     queryFn: () => fetchNetWorth(token),
     enabled: !!token && mode === "networth",
     staleTime: 60_000,
     placeholderData: (prev) => prev as any,
+    refetchOnWindowFocus: true,
   });
 
   const loading = mode === "cashflow" ? txQuery.isLoading : nwQuery.isLoading;
@@ -115,7 +180,7 @@ export default function StatCard({
       >
         <Header
           title={title}
-          range={range}
+          range={effectiveRange}
           accounts={accounts}
           selectedAccountId={selectedAccountId}
           loadingAccounts={loadingAccounts}
@@ -159,11 +224,11 @@ export default function StatCard({
 
         <Header
           title={title}
-          range={range}
+          range={effectiveRange}
           accounts={accounts}
           selectedAccountId={selectedAccountId}
           loadingAccounts={loadingAccounts}
-          showAccountSelect={false} // net worth = overall
+          showAccountSelect={false}
         />
 
         <div className="mt-3 flex items-end justify-between">
@@ -187,8 +252,7 @@ export default function StatCard({
               <span>
                 {(() => {
                   const base = Math.max(assets + Math.abs(debts), 0);
-                  const pct =
-                    base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
+                  const pct = base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
                   return `${pct}%`;
                 })()}
               </span>
@@ -199,10 +263,7 @@ export default function StatCard({
                 style={{
                   width: (() => {
                     const base = Math.max(assets + Math.abs(debts), 0);
-                    const pct =
-                      base > 0
-                        ? Math.min(100, Math.round((Math.abs(debts) / base) * 100))
-                        : 0;
+                    const pct = base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
                     return `${pct}%`;
                   })(),
                 }}
@@ -214,7 +275,7 @@ export default function StatCard({
     );
   }
 
-  // cashflow mode
+  // cashflow mode — always render; zeros display normally
   const tx: Transaction[] = txQuery.data?.transactions ?? [];
   const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expense = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -222,7 +283,6 @@ export default function StatCard({
   const flow = income + expense;
   const spendPct = flow > 0 ? Math.min(100, Math.round((expense / flow) * 100)) : 0;
   const netPositive = net >= 0;
-  const noResults = !isFetching && tx.length === 0;
 
   return (
     <div
@@ -242,58 +302,52 @@ export default function StatCard({
 
       <Header
         title={title}
-        range={range}
+        range={effectiveRange}
         accounts={accounts}
         selectedAccountId={selectedAccountId}
         loadingAccounts={loadingAccounts}
         showAccountSelect={showAccountSelect}
       />
 
-      {noResults ? (
-        <div className="mt-4 text-sm text-white/70">No results for this filter.</div>
-      ) : (
-        <>
-          <div className="mt-3 flex items-end justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-white/60">Net</div>
-              <div
-                className={[
-                  "mt-1 font-semibold font-mono tabular-nums text-3xl",
-                  netPositive ? "text-emerald-300" : "text-rose-300",
-                ].join(" ")}
-              >
-                {netPositive ? "+" : "-"}
-                {money(Math.abs(net))}
-              </div>
-            </div>
-            <div className="w-40">
-              <div className="flex items-center justify-between text-[11px] text-white/60">
-                <span>Spend</span>
-                <span>{spendPct}%</span>
-              </div>
-              <div className="mt-1 h-2 rounded-full bg-white/10">
-                <div className="h-2 rounded-full bg-rose-400/70" style={{ width: `${spendPct}%` }} />
-              </div>
-            </div>
+      <div className="mt-3 flex items-end justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-white/60">Net</div>
+          <div
+            className={[
+              "mt-1 font-semibold font-mono tabular-nums text-3xl",
+              netPositive ? "text-emerald-300" : "text-rose-300",
+            ].join(" ")}
+          >
+            {netPositive ? "+" : "-"}
+            {money(Math.abs(net))}
           </div>
+        </div>
+        <div className="w-40">
+          <div className="flex items-center justify-between text-[11px] text-white/60">
+            <span>Spend</span>
+            <span>{spendPct}%</span>
+          </div>
+          <div className="mt-1 h-2 rounded-full bg-white/10">
+            <div className="h-2 rounded-full bg-rose-400/70" style={{ width: `${spendPct}%` }} />
+          </div>
+        </div>
+      </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Pill
-              icon={<ArrowUpRightIcon className="h-4 w-4" />}
-              label="Income"
-              value={money(income)}
-              className="bg-emerald-400/10 text-emerald-200 ring-emerald-400/20"
-            />
-            <Pill
-              icon={<ArrowDownRightIcon className="h-4 w-4" />}
-              label="Expense"
-              value={money(expense)}
-              className="bg-rose-400/10 text-rose-200 ring-rose-400/20"
-              prefix="-"
-            />
-          </div>
-        </>
-      )}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <Pill
+          icon={<ArrowUpRightIcon className="h-4 w-4" />}
+          label="Income"
+          value={money(income)}
+          className="bg-emerald-400/10 text-emerald-200 ring-emerald-400/20"
+        />
+        <Pill
+          icon={<ArrowDownRightIcon className="h-4 w-4" />}
+          label="Expense"
+          value={money(expense)}
+          className="bg-rose-400/10 text-rose-200 ring-rose-400/20"
+          prefix="-"
+        />
+      </div>
     </div>
   );
 }

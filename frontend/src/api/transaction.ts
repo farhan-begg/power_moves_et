@@ -1,4 +1,3 @@
-// src/api/transaction.ts
 import { http, auth } from "./http";
 
 /** ------------------ Types ------------------ */
@@ -12,11 +11,11 @@ export interface Transaction {
   type: TxnType;
   category: string;
   amount: number;
-  date: string; // ISO
+  date: string; // ISO (UTC instant) stored in DB
   description?: string;
   source: SourceType;
-  accountId?: string;   // 👈 make sure your backend saves this when ingesting Plaid
-  accountName?: string; // optional convenience for display
+  accountId?: string;
+  accountName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,12 +34,20 @@ export type TransactionsQuery = {
   type?: "income" | "expense";
   category?: string;
   source?: "manual" | "plaid";
+
+  /** UTC ISO inclusive start (from helpers/toIsoStartEndExclusive) */
   startDate?: string;
+
+  /** UTC ISO exclusive end (from helpers/toIsoStartEndExclusive) */
   endDate?: string;
+
   sortBy?: string;
   order?: "asc" | "desc";
-  accountId?: string;   // 👈 single account filter
-  accountIds?: string;  // 👈 multiple (csv: "id1,id2")
+
+  /** Single account filter */
+  accountId?: string;
+  /** Multiple accounts (CSV) */
+  accountIds?: string;
 };
 
 export interface CategoryStatRow {
@@ -65,7 +72,6 @@ export interface SummaryResponse {
 
 /** ------------------ Endpoints ------------------ */
 
-// Get transactions (paged + filters)
 export const fetchTransactions = async (
   token: string,
   params: TransactionsQuery = {}
@@ -77,32 +83,39 @@ export const fetchTransactions = async (
   const qs = new URLSearchParams(entries).toString();
   const url = qs ? `/api/transactions?${qs}` : "/api/transactions";
 
+  // 🔊
+  console.log("%c[HTTP] GET " + url, "color:#34d399;font-weight:bold");
+
   const { data } = await http.get<PagedTransactionsResponse>(url, auth(token));
   return data;
 };
 
-// Add a transaction (manual)
+
+// Add a manual transaction. `date` should be local YYYY-MM-DD.
 export const addTransaction = async (
   token: string,
-  data: Omit<Transaction, "_id" | "userId" | "createdAt" | "updatedAt" | "source"> & { date?: string }
+  data: Omit<Transaction, "_id" | "userId" | "createdAt" | "updatedAt" | "source"> & {
+    date?: string; // local YYYY-MM-DD
+  }
 ) => {
   const res = await http.post<Transaction>("/api/transactions", data, auth(token));
   return res.data;
 };
 
-// Update a transaction
 export const updateTransaction = async (
   token: string,
   id: string,
   data: Partial<
-    Pick<Transaction, "type" | "category" | "amount" | "date" | "description" | "accountId" | "accountName">
+    Pick<
+      Transaction,
+      "type" | "category" | "amount" | "date" | "description" | "accountId" | "accountName"
+    >
   >
 ) => {
   const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
   return res.data;
 };
 
-// Delete a transaction
 export const deleteTransaction = async (token: string, id: string) => {
   const res = await http.delete<{ message: string; id: string }>(
     `/api/transactions/${id}`,
@@ -111,7 +124,6 @@ export const deleteTransaction = async (token: string, id: string) => {
   return res.data;
 };
 
-// Category stats (✅ now supports accountId/accountIds)
 export const fetchCategoryStats = async (
   token: string,
   params: { startDate?: string; endDate?: string; accountId?: string; accountIds?: string } = {},
@@ -125,13 +137,12 @@ export const fetchCategoryStats = async (
   return data;
 };
 
-// Time-series summary (✅ now supports accountId/accountIds)
 export const fetchSummary = async (
   token: string,
   params: {
     granularity: Granularity;
-    startDate?: string;
-    endDate?: string;
+    startDate?: string;   // inclusive UTC ISO
+    endDate?: string;     // exclusive UTC ISO
     accountId?: string;
     accountIds?: string;
   },

@@ -1,4 +1,3 @@
-// src/components/widgets/TransactionsListWidget.tsx
 import React from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
@@ -15,6 +14,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
+import { formatUTC_MMDDYYYY, localYMD, toIsoStartEndExclusive } from "../../helpers/date";
 
 type Filter = "all" | "expense" | "income";
 type Preset = "7d" | "30d" | "90d" | "ytd" | "1y" | "custom";
@@ -35,46 +35,20 @@ const glass =
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
-const toISO = (d: Date) => {
-  const dd = new Date(d);
-  dd.setHours(0, 0, 0, 0);
-  return dd.toISOString().slice(0, 10);
-};
-
-function presetRange(p: Preset) {
+/* ===== Preset → local YMD range (no TZ shift) ===== */
+function localRangeForPreset(p: Exclude<Preset, "custom">) {
+  // local midnight today
   const today = new Date();
-  const endDate = toISO(today);
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const start = new Date(end);
 
-  switch (p) {
-    case "7d": {
-      const s = new Date(today);
-      s.setDate(s.getDate() - 6);
-      return { startDate: toISO(s), endDate };
-    }
-    case "30d": {
-      const s = new Date(today);
-      s.setDate(s.getDate() - 29);
-      return { startDate: toISO(s), endDate };
-    }
-    case "90d": {
-      const s = new Date(today);
-      s.setDate(s.getDate() - 89);
-      return { startDate: toISO(s), endDate };
-    }
-    case "ytd": {
-      const s = new Date(today.getFullYear(), 0, 1);
-      return { startDate: toISO(s), endDate };
-    }
-    case "1y": {
-      const s = new Date(today);
-      s.setFullYear(s.getFullYear() - 1);
-      s.setDate(s.getDate() + 1);
-      return { startDate: toISO(s), endDate };
-    }
-    case "custom":
-    default:
-      return { startDate: "", endDate: "" };
-  }
+  if (p === "7d") start.setDate(start.getDate() - 6);
+  else if (p === "30d") start.setDate(start.getDate() - 29);
+  else if (p === "90d") start.setDate(start.getDate() - 89);
+  else if (p === "ytd") start.setMonth(0, 1);
+  else if (p === "1y") start.setFullYear(start.getFullYear() - 1);
+
+  return { startDate: localYMD(start), endDate: localYMD(end) };
 }
 
 // accept only real Plaid ids; anything else means "All"
@@ -100,11 +74,11 @@ export default function TransactionsListWidget() {
   const [preset, setPreset] = React.useState<Preset>("30d");
 
   // Applied date range that powers the query
-  const init = React.useMemo(() => presetRange("30d"), []);
+  const init = React.useMemo(() => localRangeForPreset("30d"), []);
   const [startDate, setStartDate] = React.useState(init.startDate);
   const [endDate, setEndDate] = React.useState(init.endDate);
 
-  // Pending inputs for "custom" mode (edited but not yet applied)
+  // Pending inputs for "custom" mode
   const [pendingStart, setPendingStart] = React.useState(init.startDate);
   const [pendingEnd, setPendingEnd] = React.useState(init.endDate);
   const [dateError, setDateError] = React.useState<string | null>(null);
@@ -118,10 +92,9 @@ export default function TransactionsListWidget() {
   // Update applied dates when preset changes (except custom)
   React.useEffect(() => {
     if (preset === "custom") return;
-    const r = presetRange(preset);
+    const r = localRangeForPreset(preset);
     setStartDate(r.startDate);
     setEndDate(r.endDate);
-    // sync pending with applied
     setPendingStart(r.startDate);
     setPendingEnd(r.endDate);
     setDateError(null);
@@ -133,7 +106,7 @@ export default function TransactionsListWidget() {
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
-    placeholderData: keepPreviousData,  // v5 helper
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     gcTime: 30 * 60 * 1000,
   });
@@ -147,40 +120,68 @@ export default function TransactionsListWidget() {
     return [];
   }, [accountsRaw]);
 
-  // Transactions (honors normalized GLOBAL account id)
-  const {
-    data: txRes,
-    isError,
-    isFetching,
-  } = useQuery<PagedTransactionsResponse>({
-    queryKey: [
-      "transactions",
-      "list",
+  const accountsValidIds = React.useMemo(() => {
+    const list: string[] = [];
+    accounts.forEach((a) => {
+      const id = a.account_id || a.accountId || a.id;
+      if (id) list.push(id);
+    });
+    return new Set(list);
+  }, [accounts]);
+
+// trust the global filter (can be plaid or manual:*). Server will filter accordingly.
+const accountIdParam = accountFilterId;
+
+  // Convert applied Y-M-D to inclusive start / exclusive end ISO timestamps
+  const { startISO, endExclusiveISO } = React.useMemo(() => {
+    if (!startDate || !endDate) {
+      return { startISO: undefined, endExclusiveISO: undefined } as {
+        startISO?: string;
+        endExclusiveISO?: string;
+      };
+    }
+    return toIsoStartEndExclusive(startDate, endDate);
+  }, [startDate, endDate]);
+
+const {
+  data: txRes,
+  isError,
+  isFetching,
+} = useQuery<PagedTransactionsResponse>({
+  queryKey: ["transactions","list", filter, startISO, endExclusiveISO, page, limit, accountIdParam ?? "ALL"],
+  queryFn: () => {
+    // 🔊 DEBUG LOG
+    console.log("%c[UI→API] fetchTransactions params", "color:#22d3ee;font-weight:bold", {
       filter,
-      startDate,
-      endDate,
+      startDateYMD: startDate,
+      endDateYMD: endDate,
+      startISO,
+      endExclusiveISO,
       page,
       limit,
-      accountFilterId ?? "ALL",
-    ],
-    queryFn: () =>
-      fetchTransactions(token!, {
-        type: filter === "all" ? undefined : filter,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        page,
-        limit,
-        sortBy: "date",
-        order: "desc",
-        accountId: accountFilterId, // only when real
-      }),
-    enabled: !!token && !!(startDate && endDate),
-    placeholderData: keepPreviousData,  // v5 way to keep old data during refetch
+      accountIdParam,
+      // Helpful extra visibility
+      startISO_asLocal: startISO ? new Date(startISO!).toString() : null,
+      endExclusiveISO_asLocal: endExclusiveISO ? new Date(endExclusiveISO!).toString() : null,
+    });
+
+    return fetchTransactions(token!, {
+      type: filter === "all" ? undefined : filter,
+      startDate: startISO,
+      endDate: endExclusiveISO, // <-- exclusive
+      page,
+      limit,
+      sortBy: "date",
+      order: "desc",
+      accountId: accountIdParam,
+    });
+  },
+  enabled: !!token && !!(startISO && endExclusiveISO),
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     gcTime: 10 * 60 * 1000,
   });
 
-  // With v5 + keepPreviousData helper, types are preserved:
   const transactions: Transaction[] = txRes?.transactions ?? [];
   const total = txRes?.total ?? 0;
   const pages = txRes?.pages ?? 1;
@@ -233,7 +234,6 @@ export default function TransactionsListWidget() {
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
-  // Apply / Reset for custom range
   const applyCustomRange = () => {
     if (!pendingStart || !pendingEnd) return;
     if (pendingStart > pendingEnd) {
@@ -260,9 +260,9 @@ export default function TransactionsListWidget() {
           <div className="text-xs text-white/60">
             {startDate} → {endDate}
           </div>
-          {accountFilterId ? (
-            <div className="mt-1 text-[11px] text-white/60">
-              Account: <span className="text-white">{accMap.get(accountFilterId) || "Selected account"}</span>
+          {accountIdParam ? (
+            <div className="mt-1 text/[11px] text-white/60">
+              Account: <span className="text-white">{accMap.get(accountIdParam) || "Selected account"}</span>
             </div>
           ) : (
             <div className="mt-1 text-[11px] text-white/40">All accounts</div>
@@ -276,7 +276,6 @@ export default function TransactionsListWidget() {
             <FilterPill label="Income" value="income" />
           </div>
 
-          {/* Subtle updating chip (no layout jump) */}
           {isFetching && (
             <div className="ml-2 text-[11px] px-2 py-1 rounded-full bg-white/5 ring-1 ring-white/10 text-white/60">
               Updating…
@@ -345,14 +344,14 @@ export default function TransactionsListWidget() {
       {!isError && transactions.length === 0 && (
         <div className="text-white/70">
           No results for <b>{filter === "all" ? "all types" : filter}</b>
-          {accountFilterId && (
-            <> in <b>{accMap.get(accountFilterId) || "selected account"}</b></>
+          {accountIdParam && (
+            <> in <b>{accMap.get(accountIdParam) || "selected account"}</b></>
           )}{" "}
           between <b>{startDate}</b> and <b>{endDate}</b>.
         </div>
       )}
 
-      {/* Results (keep rendering while fetching) */}
+      {/* Results */}
       {!isError && transactions.length > 0 && (
         <>
           <ul
@@ -396,7 +395,7 @@ export default function TransactionsListWidget() {
                         {actionLabel}
                       </span>
                       <span className="text-white/30">•</span>
-                      <span>{new Date(t.date).toLocaleDateString()}</span>
+                    <span>{formatUTC_MMDDYYYY(t.date)}</span>
                     </div>
                   </div>
 

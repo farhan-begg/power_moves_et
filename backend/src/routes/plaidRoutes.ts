@@ -1,3 +1,4 @@
+// server/routes/plaidRoutes.ts
 import { Router, type Response } from "express";
 import mongoose from "mongoose";
 import plaidClient from "../services/plaidService";
@@ -7,6 +8,7 @@ import { AuthRequest, protect } from "../middleware/authMiddleware";
 import { encrypt, decrypt } from "../utils/cryptoUtils";
 import { Products, CountryCode } from "plaid";
 import ManualAsset from "../models/ManualAsset";
+import { runAccountIdBackfillForUser } from "../services/plaidBackfillService";
 
 const router = Router();
 
@@ -46,7 +48,7 @@ router.post("/link-token", protect, async (req: AuthRequest, res: Response) => {
 });
 
 /* ----------------------------------------------------------
-   2) Exchange public token
+   2) Exchange public token (save token + background backfill)
 ---------------------------------------------------------- */
 router.post("/exchange-public-token", protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -56,7 +58,18 @@ router.post("/exchange-public-token", protect, async (req: AuthRequest, res: Res
     const { data } = await plaidClient.itemPublicTokenExchange({ public_token });
     await User.findByIdAndUpdate(String(req.user), { plaidAccessToken: encrypt(data.access_token) });
 
+    // respond immediately so the link flow is snappy
     res.json({ message: "Plaid account linked successfully" });
+
+    // run backfill in the background
+    setImmediate(async () => {
+      try {
+        const result = await runAccountIdBackfillForUser(String(req.user), 30);
+        console.log("✅ Backfill after link:", result);
+      } catch (e) {
+        console.warn("⚠️ Backfill after link failed:", (e as any)?.message || e);
+      }
+    });
   } catch (err: any) {
     console.error("❌ /exchange-public-token error:", err.response?.data || err.message || err);
     res.status(500).json({ error: "Failed to exchange token" });
@@ -95,7 +108,7 @@ router.get("/accounts", protect, async (req: AuthRequest, res: Response) => {
 });
 
 /* ----------------------------------------------------------
-   4) Cards (prefer Liabilities; fallback to accounts type)
+   4) Cards (prefer Liabilities; fallback to accounts)
 ---------------------------------------------------------- */
 router.get("/cards", protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -105,7 +118,6 @@ router.get("/cards", protect, async (req: AuthRequest, res: Response) => {
     const accountsResp = await plaidClient.accountsBalanceGet({ access_token: accessToken });
     const accounts = accountsResp.data.accounts;
 
-    // keep types simple to avoid squiggles
     const byId = new Map<string, any>();
     for (const a of accounts) byId.set(a.account_id, a);
 
@@ -157,12 +169,9 @@ router.get("/cards", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
-
 /* ----------------------------------------------------------
    5) Net worth (assets - debts) with Liabilities refinement
 ---------------------------------------------------------- */
-// server/routes/plaid.ts (or wherever your router is)
-// server/routes/plaid.ts (or wherever your router lives)
 router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
   try {
     const accessToken = await getDecryptedAccessToken(req, res);
@@ -173,24 +182,26 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
     const { data } = await plaidClient.accountsBalanceGet({ access_token: accessToken });
     let accounts = data.accounts;
 
-    // If filtering, keep only the requested account
+    // If filtering, keep only the requested Plaid account
     if (filterAccountId) {
       accounts = accounts.filter(
         (a) =>
           a.account_id === filterAccountId ||
-          (a as any).accountId === filterAccountId // if you ever mapped custom ids
+          (a as any).accountId === filterAccountId
       );
+      // Note: when filterAccountId is a "manual:*" id, this will simply result in an empty array,
+      // which is correct (no Plaid balances for manual-only accounts).
     }
 
     const sum = (arr: number[]) => arr.reduce((s, n) => s + (Number.isFinite(n) ? n : 0), 0);
 
-    // Assets via Plaid (depository + investment)
+    // ------- Plaid assets (depository + investment) -------
     const assetTypes = new Set(["depository", "investment"]);
     const assetsPlaid = sum(
       accounts.filter((a) => assetTypes.has(a.type as any)).map((a) => a.balances.current || 0)
     );
 
-    // Debts via Plaid (credit + loan)
+    // ------- Plaid debts (credit + loan) -------
     const debtTypes = new Set(["credit", "loan"]);
     let debts = sum(
       accounts
@@ -239,33 +250,52 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
       /* fall back to account balances if Liabilities not available */
     }
 
-    // 🔹 Manual pieces (GLOBAL — not per-account; change if you want per-account)
+    // --------- Manual pieces (respect account filter) ---------
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
-    // Manual cash from manual transactions (income - expense)
+    // (1) Manual cash from manual transactions (income - expense)
+    // If an account is selected -> only that account's manual txns
+    // If "All accounts" -> include ALL manual txns (both linked and global)
+    const manualTxnMatch: any = { userId, source: "manual" };
+    if (filterAccountId) {
+      manualTxnMatch.accountId = filterAccountId; // ONLY that account
+    }
     const manualAgg = await Transaction.aggregate([
-      { $match: { userId, source: "manual" } },
+      { $match: manualTxnMatch },
       {
         $group: {
           _id: null,
           income: { $sum: { $cond: [{ $eq: ["$type", "income"] }, "$amount", 0] } },
-          expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
+          expense:{ $sum: { $cond: [{ $eq: ["$type", "expense"]}, "$amount", 0] } },
         },
       },
     ]);
     const manualCash = (manualAgg[0]?.income || 0) - (manualAgg[0]?.expense || 0);
 
-    // Manual assets
-    const manualAssetsAgg = await ManualAsset.aggregate([
-      { $match: { userId } },
-      { $group: { _id: null, total: { $sum: "$value" } } },
-    ]);
-    const manualAssetsTotal = manualAssetsAgg[0]?.total ?? 0;
+    // (2) Manual assets
+    // If an account is selected -> include ONLY account-scoped assets for that account
+    // If "All accounts" -> include ALL manual assets (global + account-scoped)
+    let manualAssetsTotal = 0;
+    if (filterAccountId) {
+      const accAssets = await ManualAsset.aggregate([
+        { $match: { userId, accountScope: "account", accountId: filterAccountId } },
+        { $group: { _id: null, total: { $sum: "$value" } } },
+      ]);
+      manualAssetsTotal = accAssets[0]?.total ?? 0;
+    } else {
+      const allAssets = await ManualAsset.aggregate([
+        { $match: { userId } }, // global + any account-scoped
+        { $group: { _id: null, total: { $sum: "$value" } } },
+      ]);
+      manualAssetsTotal = allAssets[0]?.total ?? 0;
+    }
 
+    // --------- Compose result ---------
     const assetsWithManual = assetsPlaid + manualCash + manualAssetsTotal;
     const netWorth = assetsWithManual - debts;
 
-    // Breakdown: only include the filtered accounts’ balances
+    // Breakdown: include only balances for the currently selected Plaid accounts
+    // and add the manual pieces relevant to the current view.
     const breakdownByType: Record<string, number> = {};
     for (const a of accounts) {
       const key = a.type || "other";
@@ -286,7 +316,6 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
       },
       breakdownByType,
       currencyHint: accounts[0]?.balances?.iso_currency_code || "USD",
-      // helpful echo for the UI
       appliedFilter: filterAccountId || null,
     });
   } catch (err: any) {
@@ -296,10 +325,8 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
 });
 
 /* ----------------------------------------------------------
-   6) Transactions (sync last 30 days → Mongo upsert)
+   6) Transactions (sync last 30 days → Mongo upsert + backfill)
 ---------------------------------------------------------- */
-// routes/plaidRoutes.ts  (only the /transactions handler changed)
-// routes/plaidRoutes.ts (add/replace this handler)
 router.get("/transactions", protect, async (req: AuthRequest, res: Response) => {
   try {
     const accessToken = await getDecryptedAccessToken(req, res);
@@ -375,6 +402,16 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     }));
     if (ops.length) await Transaction.bulkWrite(ops, { ordered: false });
 
+    // 🔁 fire-and-forget backfill to ensure any older rows get accountId/accountName
+    setImmediate(async () => {
+      try {
+        const result = await runAccountIdBackfillForUser(String(req.user), 30);
+        console.log("🔄 Backfill after /plaid/transactions sync:", result);
+      } catch (e) {
+        console.warn("⚠️ Backfill after sync failed:", (e as any)?.message || e);
+      }
+    });
+
     // return from Mongo (respect same filter)
     const mongoQuery: any = { userId };
     if (wantedAccountIds.length) mongoQuery.accountId = { $in: wantedAccountIds };
@@ -386,7 +423,6 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     res.status(500).json({ error: "Failed to fetch Plaid transactions" });
   }
 });
-
 
 /* ----------------------------------------------------------
    7) Investments (holdings + securities)
@@ -431,8 +467,6 @@ router.get("/investments", protect, async (req: AuthRequest, res: Response) => {
     });
   }
 });
-
-
 
 /* ----------------------------------------------------------
    (Optional) quick route debugger

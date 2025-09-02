@@ -1,77 +1,104 @@
+// src/components/filters/GlobalAccountFilter.tsx
 import React from "react";
-import { useSelector, useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { RootState } from "../../app/store";
-import { setSelectedAccountId, clearAccountFilter } from "../../features/filters/globalAccountFilterSlice";
-import { useQuery } from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
+import { fetchManualAccounts } from "../../api/manual";
+import {
+  setSelectedAccount,
+  ALL_ACCOUNTS_ID,
+} from "../../features/filters/globalAccountFilterSlice";
 
-type AccountOpt = {
-  accountId?: string;
-  account_id?: string;
-  id?: string;
-  name?: string;
-  officialName?: string | null;
-  official_name?: string | null;
-  mask?: string | null;
-  subtype?: string | null;
-};
+const isReal = (v?: string | null) =>
+  !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
+
+type Option = { id: string; label: string; source: "plaid" | "manual" };
 
 export default function GlobalAccountFilter() {
   const dispatch = useDispatch();
-  const token = useSelector((s: RootState) => s.auth.token)!;
-  const selected = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+  const token = useSelector((s: RootState) => s.auth.token);
+  const selectedId =
+    useSelector((s: RootState) => s.accountFilter.selectedAccountId) ||
+    ALL_ACCOUNTS_ID;
 
-  const { data: accountsRaw, isLoading } = useQuery<AccountOpt[] | { accounts?: AccountOpt[] }>({
-    queryKey: ["plaid", "accounts"],
-    queryFn: () => fetchPlaidAccounts(token),
+  const { data: plaidRaw } = useQuery({
+    queryKey: ["accounts", "plaid"],
+    queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
-    placeholderData: (p) => p as any,
+    placeholderData: keepPreviousData,
   });
 
-  const accounts: AccountOpt[] = React.useMemo(() => {
-    if (!accountsRaw) return [];
-    return Array.isArray(accountsRaw) ? accountsRaw : (accountsRaw.accounts ?? []);
-  }, [accountsRaw]);
+  const { data: manualRaw } = useQuery({
+    queryKey: ["accounts", "manual"],
+    queryFn: () => fetchManualAccounts(token!),
+    enabled: !!token,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
 
-  const getId = (a: AccountOpt) => a.accountId || a.account_id || a.id || "";
-  const getLabel = (a: AccountOpt) =>
-    a.name || a.officialName || a.official_name || a.subtype || "Account";
+  const options = React.useMemo<Option[]>(() => {
+    const result: Option[] = [
+      { id: ALL_ACCOUNTS_ID, label: "All accounts", source: "plaid" },
+    ];
+
+    (plaidRaw ?? []).forEach((a: any) => {
+      const id = a.account_id || a.accountId || a.id;
+      if (!id) return;
+      const base = a.name || a.official_name || a.subtype || "Account";
+      const mask = a.mask ? ` ••••${String(a.mask).slice(-4)}` : "";
+      result.push({ id, label: `${base}${mask}`, source: "plaid" });
+    });
+
+    (manualRaw ?? []).forEach((m) => {
+      result.push({ id: m.accountId, label: `${m.name} (Manual)`, source: "manual" });
+    });
+
+    const [all, ...rest] = result;
+    rest.sort((a, b) => a.label.localeCompare(b.label));
+    return [all, ...rest];
+  }, [plaidRaw, manualRaw]);
+
+  const onChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = e.target.value;
+    if (!isReal(id)) {
+      dispatch(setSelectedAccount({ id: ALL_ACCOUNTS_ID, label: "All accounts" }));
+    } else {
+      const opt = options.find((o) => o.id === id);
+      dispatch(setSelectedAccount({ id, label: opt?.label || "Selected account" }));
+    }
+    window.dispatchEvent(new CustomEvent("data:filter:account:changed"));
+  };
 
   return (
-    <div className="flex items-center gap-2">
-      <label className="text-[11px] text-white/60">Account</label>
+    <div className="inline-flex items-center gap-3">
+      <label className="text-sm font-medium text-white/70">Account</label>
       <select
-        className="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
-        value={selected}
-        onChange={(e) => {
-          const v = e.target.value;
-          v ? dispatch(setSelectedAccountId(v)) : dispatch(clearAccountFilter());
-        }}
-        disabled={isLoading}
-        title="Global account filter"
+        value={selectedId}
+        onChange={onChange}
+        className="
+      px-4 py-2
+    text-sm sm:text-base font-medium
+    bg-white/10 backdrop-blur-md
+    rounded-lg
+    padding-10
+    text-white shadow-md
+    focus:outline-none focus:ring-2 focus:ring-white/30
+    hover:bg-white/20
+    transition
+        "
       >
-        <option value="">All accounts</option>
-        {accounts.map((a) => {
-          const id = getId(a);
-          if (!id) return null;
-          const label = getLabel(a);
-          const mask = a.mask ? ` ••${a.mask}` : "";
-          return (
-            <option key={id} value={id}>
-              {label}{mask}
-            </option>
-          );
-        })}
+        {options.map((o) => (
+          <option
+            key={o.id}
+            value={o.id}
+            className="bg-slate-900 text-white"
+          >
+            {o.label}
+          </option>
+        ))}
       </select>
-      {selected && (
-        <button
-          onClick={() => dispatch(clearAccountFilter())}
-          className="text-[11px] underline text-white/70 hover:text-white"
-        >
-          Clear
-        </button>
-      )}
     </div>
   );
 }

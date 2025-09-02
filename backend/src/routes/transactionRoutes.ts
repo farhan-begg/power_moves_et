@@ -1,37 +1,151 @@
-// routes/transactionRoutes.ts
-import { Router, Response } from "express";
-import mongoose, { PipelineStage } from "mongoose";
+import { Router, type Response } from "express";
+import mongoose, { PipelineStage, Types } from "mongoose";
 import Transaction from "../models/Transaction";
-import User from "../models/User";                    // ✅ missing
-import plaidClient from "../services/plaidService";   // ✅ missing
-import { decrypt } from "../utils/cryptoUtils";       // ✅ missing
 import { AuthRequest, protect } from "../middleware/authMiddleware";
+import ManualAccount, { ManualAccountDoc } from "../models/ManualAccount";
 
 const router = Router();
 
-/** Helper: parse one or many account ids from query */
+/* --------------------------------------------
+   Helpers
+-------------------------------------------- */
+
 function parseAccountIds(q: { accountId?: string; accountIds?: string }) {
-  const idsFromCSV = (q.accountIds || "")
+  const BAD = new Set(["__all__", "all", "undefined", "null", ""]);
+  const single = q.accountId && !BAD.has(String(q.accountId));
+  const many = (q.accountIds || "")
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (q.accountId && idsFromCSV.length) {
-    return Array.from(new Set([q.accountId, ...idsFromCSV]));
-  }
-  if (q.accountId) return [q.accountId];
-  if (idsFromCSV.length) return idsFromCSV;
+    .filter((s) => s && !BAD.has(s));
+  if (single && many.length) return Array.from(new Set([q.accountId!, ...many]));
+  if (single) return [q.accountId!];
+  if (many.length) return many;
   return [];
 }
 
-/** -------------------------------------------
- * POST /api/transactions
- * Create a MANUAL transaction (can pin to an account)
- * Body: { type, category, amount, description?, date?, accountId?, accountName? }
- * ------------------------------------------- */
+function isManualAccountId(id?: string | null): id is string {
+  return !!id && id.startsWith("manual:");
+}
+
+function manualAccountMongoId(manualAccountId: string): string | null {
+  if (!isManualAccountId(manualAccountId)) return null;
+  return manualAccountId.slice("manual:".length) || null;
+}
+
+async function verifyManualAccountOwnership(
+  userId: Types.ObjectId,
+  manualId: string
+): Promise<ManualAccountDoc | null> {
+  const mongoId = manualAccountMongoId(manualId);
+  if (!mongoId) return null;
+  if (!mongoose.isValidObjectId(mongoId)) return null;
+  // no .lean() here to keep strong typing on fields
+  const acct = await ManualAccount.findOne({ _id: mongoId, userId });
+  return acct || null;
+}
+
+async function getOrCreateManualAccountByName(
+  userId: Types.ObjectId,
+  nameRaw: string,
+  currency?: string
+): Promise<{ accountId: string; accountName: string }> {
+  const name = (nameRaw || "").trim();
+  if (!name) throw new Error("manualAccountName cannot be empty");
+
+  const existing = await ManualAccount.findOne({
+    userId,
+    name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+  });
+
+  if (existing) {
+    return {
+      accountId: `manual:${String(existing._id)}`, // String() fixes TS18046
+      accountName: existing.name,
+    };
+  }
+
+  const created = await ManualAccount.create({
+    userId,
+    name,
+    currency: currency || "USD",
+  });
+
+  return {
+    accountId: `manual:${String(created._id)}`, // String() fixes TS18046
+    accountName: created.name,
+  };
+}
+
+/* --------------------------------------------
+   Manual Accounts endpoints
+-------------------------------------------- */
+
+router.get("/manual-accounts", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(String(req.user));
+
+    // Use lean with an explicit generic so TS knows currency exists.
+    const items = await ManualAccount.find({ userId })
+      .sort({ createdAt: -1 })
+      .lean<{ _id: Types.ObjectId; name: string; currency?: string; createdAt: Date; updatedAt: Date }[]>();
+
+    const data = items.map((a) => ({
+      _id: a._id,
+      accountId: `manual:${String(a._id)}`,
+      name: a.name,
+      currency: a.currency || "USD",
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+    }));
+
+    res.json(data);
+  } catch (err: any) {
+    console.error("❌ GET /manual-accounts error:", err?.message || err);
+    res.status(500).json({ error: "Failed to list manual accounts", details: err?.message || err });
+  }
+});
+
+router.post("/manual-accounts", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(String(req.user));
+    const { name, currency = "USD" } = req.body as { name?: string; currency?: string };
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "name is required" });
+    }
+
+    const created = await ManualAccount.create({ userId, name: name.trim(), currency });
+
+    res.status(201).json({
+      _id: created._id,
+      accountId: `manual:${String(created._id)}`,
+      name: created.name,
+      currency: created.currency || "USD",
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+    });
+  } catch (err: any) {
+    console.error("❌ POST /manual-accounts error:", err?.message || err);
+    res.status(500).json({ error: "Failed to create manual account", details: err?.message || err });
+  }
+});
+
+/* --------------------------------------------
+   Transactions CRUD
+-------------------------------------------- */
+
 router.post("/", protect, async (req: AuthRequest, res: Response) => {
   try {
-    const { type, category, amount, description, date, accountId, accountName } = req.body as {
+    const {
+      type,
+      category,
+      amount,
+      description,
+      date,
+      accountId,
+      accountName,
+      manualAccountName,
+      manualAccountCurrency,
+    } = req.body as {
       type: "income" | "expense";
       category: string;
       amount: number | string;
@@ -39,71 +153,85 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
       date?: string;
       accountId?: string;
       accountName?: string;
+      manualAccountName?: string;
+      manualAccountCurrency?: string;
     };
 
+    const userId = new mongoose.Types.ObjectId(String(req.user));
     const amt = typeof amount === "string" ? Number(amount) : amount;
+
     if (!type || !category || typeof amt !== "number" || !isFinite(amt)) {
       return res.status(400).json({ error: "type, category, and a numeric amount are required" });
     }
 
-    const transaction = new Transaction({
-      userId: new mongoose.Types.ObjectId(String(req.user)),
+    let finalAccountId = accountId || undefined;
+    let finalAccountName = accountName || undefined;
+
+    if (!finalAccountId && manualAccountName) {
+      const created = await getOrCreateManualAccountByName(
+        userId,
+        manualAccountName,
+        manualAccountCurrency || "USD"
+      );
+      finalAccountId = created.accountId;
+      finalAccountName = created.accountName;
+    }
+
+    if (isManualAccountId(finalAccountId)) {
+      const owns = await verifyManualAccountOwnership(userId, finalAccountId!);
+      if (!owns) {
+        return res.status(403).json({ error: "Not authorized to use that manual account" });
+      }
+    }
+
+    const when = date ? new Date(date) : new Date();
+
+    const txn = await Transaction.create({
+      userId,
       type,
       category,
       amount: amt,
       description,
-      date: date ? new Date(date) : new Date(),
+      date: when,
       source: "manual",
-      accountId: accountId || undefined,
-      accountName: accountName || undefined,
+      accountId: finalAccountId, // undefined → global
+      accountName: finalAccountName,
     });
 
-    await transaction.save();
-    console.log("✅ Transaction saved:", transaction._id);
-    res.status(201).json(transaction);
+    res.status(201).json(txn);
   } catch (err: any) {
-    console.error("❌ Transaction save error:", err);
-    res.status(400).json({ error: "Error saving transaction", details: err.message || err });
+    console.error("❌ Transaction save error:", err?.message || err);
+    res.status(400).json({ error: "Error saving transaction", details: err?.message || err });
   }
 });
 
-/** -------------------------------------------
- * GET /api/transactions
- * Paged list w/ filters + source breakdown
- * Query: type, category, minAmount, maxAmount, startDate, endDate,
- *        sortBy, order, page, limit, source, accountId, accountIds (CSV)
- * ------------------------------------------- */
 router.get("/", protect, async (req: AuthRequest, res: Response) => {
   try {
     const {
-      type,
-      category,
-      minAmount,
-      maxAmount,
-      startDate,
-      endDate,
-      sortBy,
-      order,
-      page,
-      limit,
-      source,
-      accountId,
-      accountIds,
+      type, category, source,
+      startDate, endDate,
+      minAmount, maxAmount,
+      sortBy, order,
+      page, limit,
+      accountId, accountIds,
     } = req.query as {
       type?: string;
       category?: string;
-      minAmount?: string;
-      maxAmount?: string;
+      source?: "manual" | "plaid";
       startDate?: string;
       endDate?: string;
+      minAmount?: string;
+      maxAmount?: string;
       sortBy?: string;
       order?: "asc" | "desc";
       page?: string;
       limit?: string;
-      source?: string;
       accountId?: string;
       accountIds?: string;
     };
+
+    // 🔎 1) What the server received from the client
+    console.log("GET /api/transactions query:", req.query);
 
     const userId = new mongoose.Types.ObjectId(String(req.user));
     const filter: Record<string, any> = { userId };
@@ -113,137 +241,136 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
     if (source) filter.source = source;
     if (minAmount) filter.amount = { ...filter.amount, $gte: Number(minAmount) };
     if (maxAmount) filter.amount = { ...filter.amount, $lte: Number(maxAmount) };
+
     if (startDate || endDate) {
       filter.date = {};
-      if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate) filter.date.$lte = new Date(endDate);
+      if (startDate) filter.date.$gte = new Date(String(startDate));
+      if (endDate)  filter.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
     }
 
-    // account filtering
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) filter.accountId = ids[0];
-    else if (ids.length > 1) filter.accountId = { $in: ids };
+const ids = parseAccountIds({ accountId, accountIds });
+if (ids.length === 1) {
+  // match both new and legacy field names
+  filter.$or = [{ accountId: ids[0] }, { account_id: ids[0] }];
+} else if (ids.length > 1) {
+  filter.$or = [
+    { accountId: { $in: ids } },
+    { account_id: { $in: ids } },
+  ];
+}
 
     const sortField = (sortBy as string) || "date";
     const sortOrder = order === "asc" ? 1 : -1;
-    const sortOptions: any = { [sortField]: sortOrder };
-
     const pageNum = Number(page) || 1;
     const limitNum = Number(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
 
+    // 🔎 2) The exact Mongo filter we will execute
+    console.log("GET /api/transactions Mongo filter:", JSON.stringify(filter));
+
     const total = await Transaction.countDocuments(filter);
     const transactions = await Transaction.find(filter)
-      .sort(sortOptions)
+      .sort({ [sortField]: sortOrder })
       .skip(skip)
       .limit(limitNum);
-
-    // Source breakdown (respect same filter)
-    const sourceBreakdownAgg = await Transaction.aggregate([
-      { $match: filter },
-      { $group: { _id: "$source", count: { $sum: 1 } } },
-    ]);
-    const sourceBreakdown: Record<string, number> = {};
-    for (const row of sourceBreakdownAgg) {
-      sourceBreakdown[row._id || "unknown"] = row.count;
-    }
-
-    console.log(
-      `✅ Transactions fetched: ${transactions.length} (page ${pageNum})${
-        filter.accountId ? ` | account filter: ${JSON.stringify(filter.accountId)}` : ""
-      }`
-    );
-console.log(`✅ Transactions fetched: ${transactions.length} ...`, filter.accountId ? `| account filter: ${JSON.stringify(filter.accountId)}` : "")
 
     res.json({
       total,
       page: pageNum,
       pages: Math.ceil(total / limitNum),
       transactions,
-      sourceBreakdown,
     });
   } catch (err: any) {
-    console.error("❌ Error fetching transactions:", err);
-    res.status(500).json({ error: "Error fetching transactions", details: err.message || err });
+    console.error("❌ Error fetching transactions:", err?.message || err);
+    res.status(500).json({ error: "Error fetching transactions", details: err?.message || err });
   }
 });
 
-/** -------------------------------------------
- * DELETE /api/transactions/:id
- * ------------------------------------------- */
-router.delete("/:id", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const transaction = await Transaction.findOneAndDelete({
-      _id: req.params.id,
-      userId: new mongoose.Types.ObjectId(String(req.user)),
-    });
-
-    if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found or not authorized" });
-    }
-
-    console.log("🗑️ Transaction deleted:", transaction._id);
-    res.json({ message: "Transaction deleted successfully", id: transaction._id });
-  } catch (err: any) {
-    console.error("❌ Error deleting transaction:", err);
-    res.status(500).json({ error: "Error deleting transaction", details: err.message || err });
-  }
-});
-
-/** -------------------------------------------
- * PUT /api/transactions/:id
- * Keeps existing accountId/accountName unless provided
- * ------------------------------------------- */
 router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
   try {
-    const { type, category, amount, description, date, accountId, accountName } = req.body as {
+    const {
+      type, category, amount, description, date,
+      accountId, accountName,
+      manualAccountName, manualAccountCurrency,
+    } = req.body as {
       type?: "income" | "expense";
       category?: string;
       amount?: number | string;
       description?: string;
       date?: string;
-      accountId?: string;
-      accountName?: string;
+      accountId?: string | null; // set null/"" → global
+      accountName?: string | null;
+      manualAccountName?: string;
+      manualAccountCurrency?: string;
     };
+
+    const userId = new mongoose.Types.ObjectId(String(req.user));
 
     const update: Record<string, any> = {};
     if (type) update.type = type;
     if (category) update.category = category;
     if (amount !== undefined) {
       const n = typeof amount === "string" ? Number(amount) : amount;
-      if (!isFinite(n as number)) {
-        return res.status(400).json({ error: "amount must be numeric" });
-      }
+      if (!isFinite(n as number)) return res.status(400).json({ error: "amount must be numeric" });
       update.amount = n;
     }
     if (description !== undefined) update.description = description;
     if (date) update.date = new Date(date);
-    if (accountId !== undefined) update.accountId = accountId || undefined;
-    if (accountName !== undefined) update.accountName = accountName || undefined;
 
-    const transaction = await Transaction.findOneAndUpdate(
-      { _id: req.params.id, userId: new mongoose.Types.ObjectId(String(req.user)) },
+    if (accountId !== undefined) {
+      if (accountId === null || accountId === "") {
+        update.accountId = undefined; // global
+        update.accountName = undefined;
+      } else {
+        if (isManualAccountId(accountId)) {
+          const owns = await verifyManualAccountOwnership(userId, accountId);
+          if (!owns) return res.status(403).json({ error: "Not authorized to use that manual account" });
+          update.accountName = owns.name;
+        } else if (accountName !== undefined) {
+          update.accountName = accountName || undefined;
+        }
+        update.accountId = accountId;
+      }
+    } else if (manualAccountName) {
+      const created = await getOrCreateManualAccountByName(
+        userId,
+        manualAccountName,
+        manualAccountCurrency || "USD"
+      );
+      update.accountId = created.accountId;
+      update.accountName = created.accountName;
+    } else if (accountName !== undefined) {
+      update.accountName = accountName || undefined;
+    }
+
+    const txn = await Transaction.findOneAndUpdate(
+      { _id: req.params.id, userId },
       update,
       { new: true, runValidators: true }
     );
 
-    if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found or not authorized" });
-    }
-
-    console.log("✏️ Transaction updated:", transaction._id);
-    res.json(transaction);
+    if (!txn) return res.status(404).json({ error: "Transaction not found or not authorized" });
+    res.json(txn);
   } catch (err: any) {
-    console.error("❌ Error updating transaction:", err);
-    res.status(500).json({ error: "Error updating transaction", details: err.message || err });
+    console.error("❌ Error updating transaction:", err?.message || err);
+    res.status(500).json({ error: "Error updating transaction", details: err?.message || err });
   }
 });
 
-/** -------------------------------------------
- * GET /api/transactions/stats
- * Category totals (income/expense) — respects account filters
- * Query: startDate, endDate, accountId, accountIds
- * ------------------------------------------- */
+router.delete("/:id", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const txn = await Transaction.findOneAndDelete({
+      _id: req.params.id,
+      userId: new mongoose.Types.ObjectId(String(req.user)),
+    });
+    if (!txn) return res.status(404).json({ error: "Transaction not found or not authorized" });
+    res.json({ message: "Transaction deleted successfully", id: txn._id });
+  } catch (err: any) {
+    console.error("❌ Error deleting transaction:", err?.message || err);
+    res.status(500).json({ error: "Error deleting transaction", details: err?.message || err });
+  }
+});
+
 router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
   try {
     const { startDate, endDate, accountId, accountIds } = req.query as {
@@ -257,8 +384,8 @@ router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
 
     if (startDate || endDate) {
       match.date = {};
-      if (startDate) match.date.$gte = new Date(startDate);
-      if (endDate) match.date.$lte = new Date(endDate);
+      if (startDate) match.date.$gte = new Date(String(startDate));
+      if (endDate)  match.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
     }
 
     const ids = parseAccountIds({ accountId, accountIds });
@@ -284,9 +411,8 @@ router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
     ]);
 
     const formatted = stats.map((stat) => {
-      const income = stat.totals.find((t: any) => t.type === "income") || { totalAmount: 0, count: 0 };
+      const income  = stat.totals.find((t: any) => t.type === "income")  || { totalAmount: 0, count: 0 };
       const expense = stat.totals.find((t: any) => t.type === "expense") || { totalAmount: 0, count: 0 };
-
       return {
         category: stat._id,
         income: income.totalAmount,
@@ -298,16 +424,11 @@ router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
 
     res.json(formatted);
   } catch (err: any) {
-    console.error("❌ Error fetching stats:", err);
-    res.status(500).json({ error: "Error fetching transaction stats", details: err.message });
+    console.error("❌ Error fetching stats:", err?.message || err);
+    res.status(500).json({ error: "Error fetching transaction stats", details: err?.message });
   }
 });
 
-/** -------------------------------------------
- * GET /api/transactions/summary
- * Time-series (income/expense/net) — respects account filters
- * Query: granularity, startDate, endDate, accountId, accountIds
- * ------------------------------------------- */
 router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
   try {
     const { granularity = "month", startDate, endDate, accountId, accountIds } = req.query as {
@@ -323,8 +444,8 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
 
     if (startDate || endDate) {
       match.date = {};
-      if (startDate) match.date.$gte = new Date(startDate);
-      if (endDate) match.date.$lte = new Date(endDate);
+      if (startDate) match.date.$gte = new Date(String(startDate));
+      if (endDate)  match.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
     }
 
     const ids = parseAccountIds({ accountId, accountIds });
@@ -343,7 +464,7 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
       {
         $group: {
           _id: { $dateToString: { format, date: "$date" } },
-          income: { $sum: { $cond: [{ $eq: ["$type", "income"] }, "$amount", 0] } },
+          income:  { $sum: { $cond: [{ $eq: ["$type", "income"]  }, "$amount", 0] } },
           expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
         },
       },
@@ -362,78 +483,9 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
     const data = await Transaction.aggregate(pipeline);
     res.json({ granularity, data });
   } catch (err: any) {
-    console.error("❌ Summary error:", err.message || err);
-    res.status(500).json({ error: "Failed to fetch summary", details: err.message || err });
+    console.error("❌ Summary error:", err?.message || err);
+    res.status(500).json({ error: "Failed to fetch summary", details: err?.message || err });
   }
 });
-
-/** -------------------------------------------
- * POST /api/transactions/_backfill-accountIds
- * One-time helper: fill accountId/accountName on existing Plaid rows
- * ------------------------------------------- */
-router.post("/_backfill-accountIds", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = new mongoose.Types.ObjectId(String(req.user));
-
-    const user = await User.findById(String(req.user));
-    if (!user?.plaidAccessToken) return res.status(400).json({ error: "No Plaid account linked" });
-    const accessToken = decrypt(user.plaidAccessToken);
-
-    // accounts → names
-    const accountsResp = await plaidClient.accountsBalanceGet({ access_token: accessToken });
-    const accountsById = new Map<string, any>();
-    for (const a of accountsResp.data.accounts) accountsById.set(a.account_id, a);
-
-    // last 30 days from Plaid
-    const startDate = new Date(); startDate.setDate(startDate.getDate() - 30);
-    const endDate = new Date();
-    const plaidResp = await plaidClient.transactionsGet({
-      access_token: accessToken,
-      start_date: startDate.toISOString().slice(0, 10),
-      end_date: endDate.toISOString().slice(0, 10),
-    });
-
-    const maps = new Map<string, { accountId?: string; accountName?: string }>();
-    for (const t of plaidResp.data.transactions) {
-      const key = `${new Date(t.date).toISOString().slice(0, 10)}|${Math.abs(t.amount)}|${t.name}`;
-      const acc = t.account_id ? accountsById.get(t.account_id) : undefined;
-      const accountName = acc?.name || acc?.official_name || acc?.subtype || acc?.type || undefined;
-      maps.set(key, { accountId: t.account_id, accountName });
-    }
-
-    // local docs missing accountId
-    const local = await Transaction.find({
-      userId,
-      source: "plaid",
-      date: {
-        $gte: new Date(startDate.toISOString().slice(0, 10)),
-        $lte: new Date(endDate.toISOString().slice(0, 10)),
-      },
-      $or: [{ accountId: { $exists: false } }, { accountId: null }],
-    }).lean();
-
-    const ops: any[] = [];
-    for (const t of local) {
-      const key = `${new Date(t.date).toISOString().slice(0, 10)}|${t.amount}|${t.description}`;
-      const m = maps.get(key);
-      if (m?.accountId) {
-        ops.push({
-          updateOne: {
-            filter: { _id: t._id },
-            update: { $set: { accountId: m.accountId, accountName: m.accountName } },
-          },
-        });
-      }
-    }
-
-    if (ops.length) await Transaction.bulkWrite(ops, { ordered: false });
-
-    res.json({ updated: ops.length, scanned: local.length });
-  } catch (e: any) {
-    console.error("❌ backfill error:", e?.message || e);
-    res.status(500).json({ error: "Backfill failed", details: e?.message || e });
-  }
-});
-
 
 export default router;

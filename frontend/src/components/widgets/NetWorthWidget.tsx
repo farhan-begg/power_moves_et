@@ -1,39 +1,18 @@
 // src/components/widgets/plaid/NetWorthWidget.tsx
-// Thunk expectation:
-// createAsyncThunk('plaid/netWorth', async ({ accountId }: { accountId?: string } = {}) => {
-//   const token = localStorage.getItem("token") ?? "";
-//   const url = new URL('http://localhost:5000/api/plaid/net-worth');
-//   if (accountId) url.searchParams.set('accountId', accountId);
-//   const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` }});
-//   const json = await res.json();
-//   if (!res.ok) throw new Error(json.error || 'Failed to fetch net worth');
-//   return json;
-// });
-
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/hooks";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { fetchNetWorth } from "../../features/plaid/plaidSlice";
 import {
-  ArrowPathIcon,
-  PlusIcon,
-  TrashIcon,
-  PencilSquareIcon,
-  XMarkIcon,
-  CheckIcon,
+  ArrowPathIcon, PlusIcon, TrashIcon, PencilSquareIcon, XMarkIcon, CheckIcon,
 } from "@heroicons/react/24/outline";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
 import type { PlaidAccount } from "../../types/plaid";
+import { localYMD, formatMMDDYYYY } from "../../helpers/date";
 
-
+/* ---------- types ---------- */
 type ManualAsset = {
   _id: string;
   name: string;
@@ -41,7 +20,10 @@ type ManualAsset = {
   value: number;
   currency: string;
   notes?: string;
-  asOf?: string;
+  asOf?: string; // Y-M-D (local) preferred
+  // backend may add these:
+  accountScope?: "global" | "account";
+  accountId?: string;
 };
 
 type ManualTxnForm = {
@@ -49,7 +31,12 @@ type ManualTxnForm = {
   category: string;
   amount: string;
   description: string;
-  date: string;
+  date: string; // Y-M-D local
+  // NEW: where to put the transaction
+  destination: "current" | "new-manual";
+  // NEW: used when destination === "new-manual"
+  manualAccountName?: string;
+  manualAccountCurrency?: string;
 };
 
 type ManualAssetForm = {
@@ -59,10 +46,11 @@ type ManualAssetForm = {
   value: string;
   currency: string;
   notes?: string;
-  asOf?: string;
+  asOf?: string; // Y-M-D local
 };
 
-function money(n: number, currency: string = "USD") {
+/* ---------- helpers ---------- */
+const money = (n: number, currency: string = "USD") => {
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
@@ -72,25 +60,31 @@ function money(n: number, currency: string = "USD") {
   } catch {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2 });
   }
-}
+};
 
+// accept only real Plaid ids; anything else means "All"
+const isRealAccountId = (v?: string | null) =>
+  !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
+
+/* ---------- component ---------- */
 export default function NetWorthWidget({ className = "" }: { className?: string }) {
   const dispatch = useAppDispatch();
   const { netWorth, loading, error } = useAppSelector((s) => s.plaid);
 
   // Global account filter
-  const selectedAccountId = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+  const selectedAccountIdRaw = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+  const selectedAccountId = isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw! : undefined;
+
   const token = useSelector((s: RootState) => s.auth.token);
 
-  // Accounts for label rendering
+  // Accounts (for labels)
   const { data: accountsRaw } = useQuery<any>({
     queryKey: ["accounts"],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
-placeholderData: (
-  p: PlaidAccount[] | { accounts: PlaidAccount[] } | undefined
-) => p ?? ([] as PlaidAccount[]),
+    placeholderData: (p: PlaidAccount[] | { accounts: PlaidAccount[] } | undefined) =>
+      p ?? ([] as PlaidAccount[]),
   });
 
   const accounts = useMemo(() => {
@@ -115,29 +109,37 @@ placeholderData: (
     return `${base}${mask}`;
   }, [accounts, selectedAccountId]);
 
+  // auth headers
   const jwt = localStorage.getItem("token") ?? "";
   const authHeaders = useMemo(
     () => ({ "Content-Type": "application/json", Authorization: `Bearer ${jwt}` }),
     [jwt]
   );
 
+  // local state
   const [assets, setAssets] = useState<ManualAsset[]>([]);
   const [uiOpen, setUiOpen] = useState<"none" | "add-txn" | "add-asset">("none");
   const [saving, setSaving] = useState(false);
   const [errLocal, setErrLocal] = useState<string | null>(null);
 
-  // Keep last good net worth to avoid flicker during refetch
+  // keep last good net worth to avoid flicker
   const [lastNetWorth, setLastNetWorth] = useState<typeof netWorth | null>(null);
   useEffect(() => {
     if (netWorth) setLastNetWorth(netWorth);
   }, [netWorth]);
 
-  // Debounced refresh (prevents rapid flashes when switching accounts quickly)
+  // refresh
   const refresh = useCallback(() => {
     return dispatch(
       fetchNetWorth(selectedAccountId ? { accountId: selectedAccountId } : undefined as any)
     );
   }, [dispatch, selectedAccountId]);
+
+  // also refresh whenever the global account filter changes
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId]);
 
   const refreshTimer = useRef<number | null>(null);
   useEffect(() => {
@@ -165,14 +167,14 @@ placeholderData: (
     setAssets(data);
   }, [authHeaders, jwt]);
 
-  // Initial load
+  // init
   useEffect(() => {
     if (!netWorth && !loading) refresh();
     loadAssets().catch((e) => setErrLocal(e?.message ?? "Failed to load manual assets"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-refetch on mutations
+  // auto-refetch on events
   useEffect(() => {
     const onChanged = () => refresh();
     window.addEventListener("data:transactions:changed", onChanged);
@@ -185,23 +187,59 @@ placeholderData: (
     };
   }, [refresh]);
 
-  // ----- actions -----
+  // ----- forms (default to local today) -----
+  const [txnForm, setTxnForm] = useState<ManualTxnForm>({
+    type: "expense",
+    category: "Manual",
+    amount: "",
+    description: "",
+    date: localYMD(new Date()),
+    destination: "current",               // NEW default
+    manualAccountName: "",
+    manualAccountCurrency: "USD",
+  });
+
+  const [assetForm, setAssetForm] = useState<ManualAssetForm>({
+    name: "",
+    type: "security",
+    value: "",
+    currency: "USD",
+    notes: "",
+    asOf: localYMD(new Date()),
+  });
+
+  const [editId, setEditId] = useState<string | null>(null);
+
+  /* ---------- actions ---------- */
+
+  // Spending/Income: link to selected account OR create a new manual account
   const addManualTxn = async () => {
     setSaving(true);
     setErrLocal(null);
     try {
-      const payload = {
+      const payload: any = {
         type: txnForm.type,
         category: txnForm.category || "Manual",
         amount: Number(txnForm.amount),
         description:
           txnForm.description || (txnForm.type === "income" ? "Manual income" : "Manual expense"),
-        date: txnForm.date,
+        date: txnForm.date, // local YYYY-MM-DD
         source: "manual",
       };
+
       if (!isFinite(payload.amount) || payload.amount <= 0) {
         throw new Error("Enter a valid amount");
       }
+
+      // destination logic
+      if (txnForm.destination === "new-manual") {
+        payload.manualAccountName = (txnForm.manualAccountName || "").trim();
+        payload.manualAccountCurrency = (txnForm.manualAccountCurrency || "USD").trim() || "USD";
+        if (!payload.manualAccountName) throw new Error("Please enter a manual account name.");
+      } else if (selectedAccountId) {
+        payload.accountId = selectedAccountId;
+      }
+
       const res = await fetch("http://localhost:5000/api/transactions", {
         method: "POST",
         headers: authHeaders,
@@ -209,8 +247,14 @@ placeholderData: (
       });
       if (!res.ok) throw new Error(await res.text());
 
+      // If a new manual account was just created, let the rest of the app refresh account lists
+      if (txnForm.destination === "new-manual") {
+        window.dispatchEvent(new CustomEvent("data:accounts:changed"));
+      }
+
       window.dispatchEvent(new CustomEvent("data:transactions:changed"));
       window.dispatchEvent(new CustomEvent("data:networth:changed"));
+
       await refresh();
       setUiOpen("none");
       setTxnForm((f) => ({ ...f, amount: "", description: "" }));
@@ -221,6 +265,7 @@ placeholderData: (
     }
   };
 
+  // Manual assets default to GLOBAL-only (contribute to "All accounts" only)
   const submitAsset = async () => {
     setSaving(true);
     setErrLocal(null);
@@ -228,14 +273,19 @@ placeholderData: (
       const valueNum = Number(assetForm.value);
       if (!isFinite(valueNum) || valueNum < 0) throw new Error("Enter a valid asset value");
 
-      const body = {
+      const body: any = {
         name: assetForm.name || "Manual Asset",
         type: assetForm.type,
         value: valueNum,
         currency: assetForm.currency || "USD",
         notes: assetForm.notes,
-        asOf: assetForm.asOf,
+        asOf: assetForm.asOf, // local YYYY-MM-DD
       };
+
+      // On CREATE only, enforce global scope explicitly.
+      if (!editId) {
+        body.accountScope = "global";
+      }
 
       const url = editId
         ? `http://localhost:5000/api/manual-assets/${editId}`
@@ -258,7 +308,7 @@ placeholderData: (
         value: "",
         currency: "USD",
         notes: "",
-        asOf: new Date().toISOString().slice(0, 10),
+        asOf: localYMD(new Date()),
       });
     } catch (e: any) {
       setErrLocal(e?.message ?? "Failed to save manual asset");
@@ -287,6 +337,8 @@ placeholderData: (
 
   const startEdit = (a: ManualAsset) => {
     setEditId(a._id);
+    const fallbackAsOf = localYMD(new Date());
+    const safeAsOf = (a.asOf && a.asOf.slice(0, 10)) || fallbackAsOf;
     setAssetForm({
       id: a._id,
       name: a.name,
@@ -294,32 +346,12 @@ placeholderData: (
       value: String(a.value),
       currency: a.currency ?? "USD",
       notes: a.notes ?? "",
-      asOf: (a.asOf || new Date().toISOString()).slice(0, 10),
+      asOf: safeAsOf,
     });
     setUiOpen("add-asset");
   };
 
-  // ----- forms -----
-  const [txnForm, setTxnForm] = useState<ManualTxnForm>({
-    type: "expense",
-    category: "Manual",
-    amount: "",
-    description: "",
-    date: new Date().toISOString().slice(0, 10),
-  });
-
-  const [assetForm, setAssetForm] = useState<ManualAssetForm>({
-    name: "",
-    type: "security",
-    value: "",
-    currency: "USD",
-    notes: "",
-    asOf: new Date().toISOString().slice(0, 10),
-  });
-
-  const [editId, setEditId] = useState<string | null>(null);
-
-  // ----- derived numbers (use last good while refreshing) -----
+  /* ---------- derived ---------- */
   const show = netWorth ?? lastNetWorth;
   const isInitialLoading = loading && !lastNetWorth;
   const isRefreshing = loading && !!lastNetWorth;
@@ -333,7 +365,7 @@ placeholderData: (
   const base = Math.max(assetsSum + Math.abs(debts), 0);
   const debtPct = base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
 
-  // ----- render -----
+  /* ---------- render ---------- */
   if (isInitialLoading) return <NetWorthSkeleton className={className} />;
 
   if (error && !show) {
@@ -350,6 +382,7 @@ placeholderData: (
             Refresh
           </button>
         </div>
+        <div className="mt-1 text-[11px] text-white/60">As of {formatMMDDYYYY(new Date())}</div>
         <div className="mt-4 text-rose-300 text-sm">Failed to load: {error}</div>
         <Btn onClick={refresh} className="mt-3">
           <ArrowPathIcon className="h-4 w-4" />
@@ -366,16 +399,20 @@ placeholderData: (
         isRefreshing ? "transition-opacity duration-150 opacity-[0.88]" : "opacity-100",
       ].join(" ")}
     >
-      {/* soft glow */}
       <Glow positive={netPositive} />
 
       <div className="flex items-baseline justify-between">
         <div>
           <h3 className="text-sm font-medium text-white/90">Net worth</h3>
-          {selectedAccountId && (
+          <div className="text-[11px] text-white/60 mt-0.5">
+            As of <span className="text-white">{formatMMDDYYYY(new Date())}</span>
+          </div>
+          {selectedAccountId ? (
             <div className="text-[11px] text-white/60 mt-0.5">
               Account: <span className="text-white">{selectedAccountLabel}</span>
             </div>
+          ) : (
+            <div className="text-[11px] text-white/40 mt-0.5">All accounts</div>
           )}
         </div>
 
@@ -523,6 +560,80 @@ placeholderData: (
                 onChange={(e) => setTxnForm((f) => ({ ...f, description: e.target.value }))}
               />
             </Field>
+
+            {/* NEW: Destination picker */}
+            <Field className="md:col-span-2">
+              <Label>Destination</Label>
+              <div className="flex flex-col gap-2 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="dest"
+                    checked={txnForm.destination === "current"}
+                    onChange={() => setTxnForm((f) => ({ ...f, destination: "current" }))}
+                  />
+                  <span>
+                    Current selection{" "}
+                    {selectedAccountId ? (
+                      <span className="text-white/70">
+                        (will link to <span className="text-white">{selectedAccountLabel}</span>)
+                      </span>
+                    ) : (
+                      <span className="text-white/70">(All accounts – not linked)</span>
+                    )}
+                  </span>
+                </label>
+
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="dest"
+                    checked={txnForm.destination === "new-manual"}
+                    onChange={() =>
+                      setTxnForm((f) => ({ ...f, destination: "new-manual" }))
+                    }
+                  />
+                  <span>Create a new manual account</span>
+                </label>
+              </div>
+            </Field>
+
+            {/* NEW: Show name/currency when creating a new manual account */}
+            {txnForm.destination === "new-manual" && (
+              <>
+                <Field>
+                  <Label>Manual account name</Label>
+                  <Input
+                    placeholder="e.g., Cash Wallet, Side Hustle"
+                    value={txnForm.manualAccountName || ""}
+                    onChange={(e) =>
+                      setTxnForm((f) => ({ ...f, manualAccountName: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field>
+                  <Label>Currency</Label>
+                  <Input
+                    placeholder="USD"
+                    value={txnForm.manualAccountCurrency || "USD"}
+                    onChange={(e) =>
+                      setTxnForm((f) => ({ ...f, manualAccountCurrency: e.target.value }))
+                    }
+                  />
+                </Field>
+              </>
+            )}
+          </div>
+
+          {/* Scope note (read-only) */}
+          <div className="mt-2 text-[11px] text-white/40">
+            {txnForm.destination === "new-manual" ? (
+              <>A new manual account will be created and this entry will be linked to it.</>
+            ) : selectedAccountId ? (
+              <>This entry will be linked to <span className="text-white">{selectedAccountLabel}</span>.</>
+            ) : (
+              <>With “All accounts” selected, this entry won’t be tied to a specific account.</>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -532,7 +643,8 @@ placeholderData: (
                 saving ||
                 !txnForm.amount ||
                 !isFinite(Number(txnForm.amount)) ||
-                Number(txnForm.amount) <= 0
+                Number(txnForm.amount) <= 0 ||
+                (txnForm.destination === "new-manual" && !(txnForm.manualAccountName || "").trim())
               }
             >
               <CheckIcon className="h-4 w-4" />
@@ -635,6 +747,10 @@ placeholderData: (
             </Field>
           </div>
 
+          <div className="mt-2 text-[11px] text-white/40">
+            Assets created here are scoped to <b>All accounts</b> by default.
+          </div>
+
           <div className="mt-4 flex flex-wrap gap-2">
             <Btn
               onClick={submitAsset}
@@ -679,7 +795,12 @@ placeholderData: (
                   <div className="text-sm">{a.name}</div>
                   <div className="text-xs opacity-70">
                     {a.type} • {money(a.value, a.currency || currencyHint)}
-                    {a.asOf ? ` • as of ${a.asOf.slice(0, 10)}` : ""}
+                    {a.asOf ? ` • as of ${a.asOf.slice(0, 10)}` : ""}{" "}
+                    {a.accountScope === "account" && a.accountId ? (
+                      <span className="text-white/50">(Linked)</span>
+                    ) : (
+                      <span className="text-white/50">(All accounts)</span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -847,7 +968,6 @@ function IconBtn({
   );
 }
 
-/* ---------- form primitives ---------- */
 function FormCard({
   title,
   saving,
@@ -884,7 +1004,6 @@ function ErrorText({ children }: { children: React.ReactNode }) {
 function Divider() {
   return <div className="my-3 h-px w-full bg-white/10" />;
 }
-
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { prefix?: string };
 function Input({ prefix, className = "", ...props }: InputProps) {
   const ariaInvalid = (props as any)["aria-invalid"];
@@ -918,7 +1037,6 @@ function Input({ prefix, className = "", ...props }: InputProps) {
     />
   );
 }
-
 type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   error?: boolean | string;
   leftIcon?: React.ReactNode;
@@ -988,7 +1106,6 @@ function Select({
     </div>
   );
 }
-
 type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 function Textarea({ className = "", ...props }: TextareaProps) {
   return (
