@@ -3,8 +3,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 
-import AlreadyAuthRedirect from "./components/AlreadyAuthRedirect";
-import ProtectedRoute from "./components/ProtectRoute";
+import AlreadyAuthRedirect from "./components/auth/AlreadyAuthRedirect";
+import ProtectedRoute from "./components/auth/ProtectRoute";
 import Landing from "./pages/Landing";
 
 export default function App() {

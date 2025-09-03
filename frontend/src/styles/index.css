@@ -1,3 +1,4 @@
+
 /* src/theme/theme.css */
 @tailwind base;
 @tailwind components;
@@ -24,3 +25,5 @@
   --user-primary: #6365f13a;
   --user-card: #374151;
 }
+
+html { scroll-behavior: smooth; }

@@ -3,7 +3,7 @@ import mongoose, { PipelineStage, Types } from "mongoose";
 import Transaction from "../models/Transaction";
 import { AuthRequest, protect } from "../middleware/authMiddleware";
 import ManualAccount, { ManualAccountDoc } from "../models/ManualAccount";
-
+import Category from "../models/Category";
 const router = Router();
 
 /* --------------------------------------------
@@ -133,77 +133,72 @@ router.post("/manual-accounts", protect, async (req: AuthRequest, res: Response)
    Transactions CRUD
 -------------------------------------------- */
 
+
 router.post("/", protect, async (req: AuthRequest, res: Response) => {
   try {
+    const userId = new mongoose.Types.ObjectId(String(req.user));
     const {
-      type,
-      category,
-      amount,
-      description,
-      date,
-      accountId,
-      accountName,
-      manualAccountName,
-      manualAccountCurrency,
+      type, amount, description, date, source,
+      categoryId, category, accountId, accountName,
     } = req.body as {
       type: "income" | "expense";
-      category: string;
-      amount: number | string;
+      amount: number;
       description?: string;
-      date?: string;
+      date: string | Date;
+      source: "manual" | "plaid";
+      categoryId?: string;
+      category?: string;
       accountId?: string;
       accountName?: string;
-      manualAccountName?: string;
-      manualAccountCurrency?: string;
     };
 
-    const userId = new mongoose.Types.ObjectId(String(req.user));
-    const amt = typeof amount === "string" ? Number(amount) : amount;
-
-    if (!type || !category || typeof amt !== "number" || !isFinite(amt)) {
-      return res.status(400).json({ error: "type, category, and a numeric amount are required" });
+    if (!type || !amount || !date || !source) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
-    let finalAccountId = accountId || undefined;
-    let finalAccountName = accountName || undefined;
+    // 🔽 Resolve category
+    let finalCategoryName = (category || "Uncategorized").trim();
+    let finalCategoryId: mongoose.Types.ObjectId | null = null;
 
-    if (!finalAccountId && manualAccountName) {
-      const created = await getOrCreateManualAccountByName(
-        userId,
-        manualAccountName,
-        manualAccountCurrency || "USD"
-      );
-      finalAccountId = created.accountId;
-      finalAccountName = created.accountName;
-    }
-
-    if (isManualAccountId(finalAccountId)) {
-      const owns = await verifyManualAccountOwnership(userId, finalAccountId!);
-      if (!owns) {
-        return res.status(403).json({ error: "Not authorized to use that manual account" });
+    if (categoryId) {
+      const cat = await Category.findOne({ _id: categoryId, userId });
+      if (cat) {
+        finalCategoryId = cat._id;
+        finalCategoryName = cat.name; // keep name in txn for fast reads
+      } else {
+        return res.status(400).json({ error: "Invalid categoryId" });
+      }
+    } else if (finalCategoryName) {
+      // find-or-create user-local category by name
+      const existing = await Category.findOne({ userId, name: finalCategoryName });
+      if (existing) {
+        finalCategoryId = existing._id;
+      } else {
+        const created = await Category.create({ userId, name: finalCategoryName });
+        finalCategoryId = created._id;
       }
     }
 
-    const when = date ? new Date(date) : new Date();
-
-    const txn = await Transaction.create({
+    const doc = await Transaction.create({
       userId,
       type,
-      category,
-      amount: amt,
-      description,
-      date: when,
-      source: "manual",
-      accountId: finalAccountId, // undefined → global
-      accountName: finalAccountName,
+      amount,
+      description: description?.trim(),
+      date: new Date(date),
+      source,
+      category: finalCategoryName,
+      categoryId: finalCategoryId,
+      accountId,
+      accountName,
     });
 
-    res.status(201).json(txn);
+    res.json(doc);
   } catch (err: any) {
-    console.error("❌ Transaction save error:", err?.message || err);
-    res.status(400).json({ error: "Error saving transaction", details: err?.message || err });
+    console.error("❌ Error saving transaction:", err?.message || err);
+    res.status(500).json({ error: "Error saving transaction", details: err?.message || err });
   }
 });
+
 
 router.get("/", protect, async (req: AuthRequest, res: Response) => {
   try {
