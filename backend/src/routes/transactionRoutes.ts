@@ -4,6 +4,7 @@ import Transaction from "../models/Transaction";
 import { AuthRequest, protect } from "../middleware/authMiddleware";
 import ManualAccount, { ManualAccountDoc } from "../models/ManualAccount";
 import Category from "../models/Category";
+
 const router = Router();
 
 /* --------------------------------------------
@@ -39,7 +40,6 @@ async function verifyManualAccountOwnership(
   const mongoId = manualAccountMongoId(manualId);
   if (!mongoId) return null;
   if (!mongoose.isValidObjectId(mongoId)) return null;
-  // no .lean() here to keep strong typing on fields
   const acct = await ManualAccount.findOne({ _id: mongoId, userId });
   return acct || null;
 }
@@ -59,7 +59,7 @@ async function getOrCreateManualAccountByName(
 
   if (existing) {
     return {
-      accountId: `manual:${String(existing._id)}`, // String() fixes TS18046
+      accountId: `manual:${String(existing._id)}`,
       accountName: existing.name,
     };
   }
@@ -71,7 +71,7 @@ async function getOrCreateManualAccountByName(
   });
 
   return {
-    accountId: `manual:${String(created._id)}`, // String() fixes TS18046
+    accountId: `manual:${String(created._id)}`,
     accountName: created.name,
   };
 }
@@ -84,10 +84,15 @@ router.get("/manual-accounts", protect, async (req: AuthRequest, res: Response) 
   try {
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
-    // Use lean with an explicit generic so TS knows currency exists.
     const items = await ManualAccount.find({ userId })
       .sort({ createdAt: -1 })
-      .lean<{ _id: Types.ObjectId; name: string; currency?: string; createdAt: Date; updatedAt: Date }[]>();
+      .lean<{
+        _id: Types.ObjectId;
+        name: string;
+        currency?: string;
+        createdAt: Date;
+        updatedAt: Date;
+      }[]>();
 
     const data = items.map((a) => ({
       _id: a._id,
@@ -133,7 +138,6 @@ router.post("/manual-accounts", protect, async (req: AuthRequest, res: Response)
    Transactions CRUD
 -------------------------------------------- */
 
-
 router.post("/", protect, async (req: AuthRequest, res: Response) => {
   try {
     const userId = new mongoose.Types.ObjectId(String(req.user));
@@ -156,29 +160,27 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 🔽 Resolve category
+    // 🔽 Category resolution (Option 1 typing + Option A omission)
     let finalCategoryName = (category || "Uncategorized").trim();
-    let finalCategoryId: mongoose.Types.ObjectId | null = null;
+    let finalCategoryId: Types.ObjectId | undefined;
 
     if (categoryId) {
+      // Mongoose can cast string → ObjectId; casting here is safe but not required.
       const cat = await Category.findOne({ _id: categoryId, userId });
-      if (cat) {
-        finalCategoryId = cat._id;
-        finalCategoryName = cat.name; // keep name in txn for fast reads
-      } else {
-        return res.status(400).json({ error: "Invalid categoryId" });
-      }
+      if (!cat) return res.status(400).json({ error: "Invalid categoryId" });
+      finalCategoryId = cat._id;       // 👈 assign directly
+      finalCategoryName = cat.name;
     } else if (finalCategoryName) {
-      // find-or-create user-local category by name
       const existing = await Category.findOne({ userId, name: finalCategoryName });
       if (existing) {
-        finalCategoryId = existing._id;
+        finalCategoryId = existing._id; // 👈 assign directly
       } else {
         const created = await Category.create({ userId, name: finalCategoryName });
-        finalCategoryId = created._id;
+        finalCategoryId = created._id;  // 👈 assign directly
       }
     }
 
+    // Create (omit categoryId if undefined)
     const doc = await Transaction.create({
       userId,
       type,
@@ -187,7 +189,7 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
       date: new Date(date),
       source,
       category: finalCategoryName,
-      categoryId: finalCategoryId,
+      ...(finalCategoryId ? { categoryId: finalCategoryId } : {}),
       accountId,
       accountName,
     });
@@ -198,7 +200,6 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: "Error saving transaction", details: err?.message || err });
   }
 });
-
 
 router.get("/", protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -225,7 +226,6 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
       accountIds?: string;
     };
 
-    // 🔎 1) What the server received from the client
     console.log("GET /api/transactions query:", req.query);
 
     const userId = new mongoose.Types.ObjectId(String(req.user));
@@ -243,16 +243,12 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
       if (endDate)  filter.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
     }
 
-const ids = parseAccountIds({ accountId, accountIds });
-if (ids.length === 1) {
-  // match both new and legacy field names
-  filter.$or = [{ accountId: ids[0] }, { account_id: ids[0] }];
-} else if (ids.length > 1) {
-  filter.$or = [
-    { accountId: { $in: ids } },
-    { account_id: { $in: ids } },
-  ];
-}
+    const ids = parseAccountIds({ accountId, accountIds });
+    if (ids.length === 1) {
+      filter.$or = [{ accountId: ids[0] }, { account_id: ids[0] }];
+    } else if (ids.length > 1) {
+      filter.$or = [{ accountId: { $in: ids } }, { account_id: { $in: ids } }];
+    }
 
     const sortField = (sortBy as string) || "date";
     const sortOrder = order === "asc" ? 1 : -1;
@@ -260,7 +256,6 @@ if (ids.length === 1) {
     const limitNum = Number(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
 
-    // 🔎 2) The exact Mongo filter we will execute
     console.log("GET /api/transactions Mongo filter:", JSON.stringify(filter));
 
     const total = await Transaction.countDocuments(filter);
@@ -284,12 +279,20 @@ if (ids.length === 1) {
 router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
   try {
     const {
-      type, category, amount, description, date,
-      accountId, accountName,
-      manualAccountName, manualAccountCurrency,
+      type,
+      category,               // optional plain name (we'll resolve/create)
+      categoryId,             // ✅ new: prefer this when provided
+      amount,
+      description,
+      date,
+      accountId,
+      accountName,
+      manualAccountName,
+      manualAccountCurrency,
     } = req.body as {
       type?: "income" | "expense";
       category?: string;
+      categoryId?: string | null;
       amount?: number | string;
       description?: string;
       date?: string;
@@ -302,24 +305,66 @@ router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
     const update: Record<string, any> = {};
+
+    /* ---------- basic fields ---------- */
     if (type) update.type = type;
-    if (category) update.category = category;
     if (amount !== undefined) {
       const n = typeof amount === "string" ? Number(amount) : amount;
-      if (!isFinite(n as number)) return res.status(400).json({ error: "amount must be numeric" });
+      if (!Number.isFinite(n as number)) {
+        return res.status(400).json({ error: "amount must be numeric" });
+      }
       update.amount = n;
     }
-    if (description !== undefined) update.description = description;
+    if (description !== undefined) update.description = description?.trim();
     if (date) update.date = new Date(date);
 
+    /* ---------- category handling ---------- */
+    if (categoryId !== undefined) {
+      // When categoryId is sent, it takes precedence.
+      if (!categoryId) {
+        // If you want to allow clearing, uncomment these lines:
+        // update.categoryId = undefined;
+        // update.category = "Uncategorized";
+        // return res.json(await Transaction.findOneAndUpdate({ _id: req.params.id, userId }, update, { new: true, runValidators: true }));
+        return res.status(400).json({ error: "categoryId cannot be empty" });
+      }
+      if (!mongoose.isValidObjectId(String(categoryId))) {
+        return res.status(400).json({ error: "Invalid categoryId" });
+      }
+      const cat = await Category.findOne({
+        _id: new mongoose.Types.ObjectId(String(categoryId)),
+        userId,
+      });
+      if (!cat) return res.status(404).json({ error: "Category not found" });
+
+      update.categoryId = cat._id;
+      update.category   = cat.name; // keep denormalized name in sync
+    } else if (category !== undefined) {
+      // If only a plain name is sent, resolve or create it for this user.
+      const name = (category || "").trim();
+      if (!name) return res.status(400).json({ error: "category cannot be empty" });
+
+      let cat = await Category.findOne({ userId, name });
+      if (!cat) {
+        cat = await Category.create({ userId, name });
+      }
+      update.categoryId = cat._id;
+      update.category   = cat.name;
+    }
+
+    /* ---------- account scoping ---------- */
     if (accountId !== undefined) {
       if (accountId === null || accountId === "") {
-        update.accountId = undefined; // global
+        update.accountId = undefined; // global (no specific account)
         update.accountName = undefined;
       } else {
         if (isManualAccountId(accountId)) {
           const owns = await verifyManualAccountOwnership(userId, accountId);
-          if (!owns) return res.status(403).json({ error: "Not authorized to use that manual account" });
+          if (!owns) {
+            return res
+              .status(403)
+              .json({ error: "Not authorized to use that manual account" });
+          }
           update.accountName = owns.name;
         } else if (accountName !== undefined) {
           update.accountName = accountName || undefined;
@@ -338,19 +383,27 @@ router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
       update.accountName = accountName || undefined;
     }
 
+    /* ---------- write ---------- */
     const txn = await Transaction.findOneAndUpdate(
       { _id: req.params.id, userId },
       update,
       { new: true, runValidators: true }
     );
 
-    if (!txn) return res.status(404).json({ error: "Transaction not found or not authorized" });
+    if (!txn) {
+      return res
+        .status(404)
+        .json({ error: "Transaction not found or not authorized" });
+    }
     res.json(txn);
   } catch (err: any) {
     console.error("❌ Error updating transaction:", err?.message || err);
-    res.status(500).json({ error: "Error updating transaction", details: err?.message || err });
+    res
+      .status(500)
+      .json({ error: "Error updating transaction", details: err?.message || err });
   }
 });
+
 
 router.delete("/:id", protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -440,7 +493,7 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
     if (startDate || endDate) {
       match.date = {};
       if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
+      if (endDate)  match.date.$lt  = new Date(String(endDate));
     }
 
     const ids = parseAccountIds({ accountId, accountIds });

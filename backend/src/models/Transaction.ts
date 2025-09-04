@@ -11,8 +11,8 @@ export interface ITransaction extends Document {
   // denormalized for fast reads & back-compat
   category: string;
 
-  // normalized reference (optional but recommended)
-  categoryId?: Types.ObjectId;
+  // normalized reference (optional)
+  categoryId?: Types.ObjectId; // omitted if not set
 
   amount: number;
   date: Date;
@@ -32,10 +32,10 @@ const TransactionSchema = new Schema<ITransaction>(
     userId: { type: Schema.Types.ObjectId, required: true, index: true },
     type: { type: String, enum: ["income", "expense"], required: true },
 
-    // 🔽 keep BOTH (name + ref). Name is required for back-compat/UI,
-    // ref is optional; you’ll gradually fill it.
+    // Keep both: name required, id optional
     category: { type: String, required: true, trim: true },
-    categoryId: { type: Schema.Types.ObjectId, ref: "Category", default: null },
+    // 👉 no default; omit when not present
+    categoryId: { type: Schema.Types.ObjectId, ref: "Category" },
 
     amount: { type: Number, required: true, min: 0 },
     date: { type: Date, required: true, index: true },
@@ -52,6 +52,7 @@ const TransactionSchema = new Schema<ITransaction>(
 // helpful read patterns
 TransactionSchema.index({ userId: 1, date: -1 });
 TransactionSchema.index({ userId: 1, accountId: 1, date: -1 });
-TransactionSchema.index({ userId: 1, categoryId: 1, date: -1 });
+// sparse: only indexes docs that actually have categoryId
+TransactionSchema.index({ userId: 1, categoryId: 1, date: -1 }, { sparse: true });
 
 export default mongoose.model<ITransaction>("Transaction", TransactionSchema);

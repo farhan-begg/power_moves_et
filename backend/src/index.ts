@@ -11,6 +11,7 @@ import positionsRoutes from "./routes/positionsRoutes";
 import adviceRoutes from "./routes/adviceRoutes";
 import goalRoutes from "./routes/goalRoutes";
 import manualAccountRoutes from "./routes/manualAccountRoutes";
+import categoryRoutes from "./routes/categoryRoutes";
 
 
 dotenv.config();
@@ -49,6 +50,7 @@ app.use("/api/manual-assets", manualAssetRoutes);
 app.use("/api/advice", adviceRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/manual-accounts", manualAccountRoutes);
+app.use("/api/categories", categoryRoutes);
 
 // Health root
 app.get("/", (_req: Request, res: Response) => {

@@ -2,11 +2,11 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface CategoryDoc extends Document {
+  _id: Types.ObjectId;            // 👈 add this line
   userId: Types.ObjectId;
-  name: string;     // "Food", "Transport"...
-  icon?: string;    // emoji or icon name
-  color?: string;   // hex for UI
-  // later: auto-categorization rules/keywords
+  name: string;                   // "Food", "Transport"...
+  icon?: string;                  // emoji or icon name
+  color?: string;                 // hex for UI
 }
 
 const CategorySchema = new Schema<CategoryDoc>({
@@ -16,6 +16,6 @@ const CategorySchema = new Schema<CategoryDoc>({
   color:  { type: String, default: "#6B7280" },
 }, { timestamps: true });
 
-CategorySchema.index({ userId: 1, name: 1 }, { unique: true }); // user-local unique names
+CategorySchema.index({ userId: 1, name: 1 }, { unique: true });
 
 export default mongoose.model<CategoryDoc>("Category", CategorySchema);
