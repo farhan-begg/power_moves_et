@@ -1,3 +1,4 @@
+// src/api/transaction.ts
 import { http, auth } from "./http";
 
 /** ------------------ Types ------------------ */
@@ -9,13 +10,22 @@ export interface Transaction {
   _id: string;
   userId: string;
   type: TxnType;
+
+  /** Denormalized name (always present for fast reads/back-compat) */
   category: string;
+
+  /** Normalized reference to Category (optional on old rows / when not set) */
+  categoryId?: string;
+
   amount: number;
-  date: string; // ISO (UTC instant) stored in DB
+  date: string; // ISO string
   description?: string;
   source: SourceType;
+
+  // account-scoping
   accountId?: string;
   accountName?: string;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -32,13 +42,12 @@ export type TransactionsQuery = {
   page?: number;
   limit?: number;
   type?: "income" | "expense";
-  category?: string;
+  category?: string; // backend filters by denormalized name (string)
   source?: "manual" | "plaid";
 
-  /** UTC ISO inclusive start (from helpers/toIsoStartEndExclusive) */
+  /** UTC ISO inclusive start */
   startDate?: string;
-
-  /** UTC ISO exclusive end (from helpers/toIsoStartEndExclusive) */
+  /** UTC ISO exclusive end */
   endDate?: string;
 
   sortBy?: string;
@@ -83,34 +92,72 @@ export const fetchTransactions = async (
   const qs = new URLSearchParams(entries).toString();
   const url = qs ? `/api/transactions?${qs}` : "/api/transactions";
 
-  // 🔊
   console.log("%c[HTTP] GET " + url, "color:#34d399;font-weight:bold");
 
   const { data } = await http.get<PagedTransactionsResponse>(url, auth(token));
   return data;
 };
 
-
-// Add a manual transaction. `date` should be local YYYY-MM-DD.
+/**
+ * Create a transaction (usually source="manual").
+ * - `date` should be local YYYY-MM-DD (your backend does new Date(date))
+ * - You may supply EITHER `categoryId` OR `category` (string). If both are sent,
+ *   backend currently prioritizes `categoryId`.
+ */
 export const addTransaction = async (
   token: string,
-  data: Omit<Transaction, "_id" | "userId" | "createdAt" | "updatedAt" | "source"> & {
-    date?: string; // local YYYY-MM-DD
+  data: {
+    type: TxnType;
+    amount: number;
+    date: string; // local YYYY-MM-DD
+    description?: string;
+
+    /** Prefer this when known; backend will set `category` name to match */
+    categoryId?: string;
+
+    /** Fallback name; backend will find-or-create a Category and set categoryId */
+    category?: string;
+
+    /** Usually "manual" when adding via UI */
+    source: SourceType;
+
+    /** Optional account scoping */
+    accountId?: string;
+    accountName?: string;
   }
 ) => {
   const res = await http.post<Transaction>("/api/transactions", data, auth(token));
   return res.data;
 };
 
+/**
+ * Update a transaction.
+ * - You can change the category by sending `categoryId` (preferred) or `category` (name).
+ * - You can also re-scope to an account or clear scoping (send `accountId: ""` or null).
+ * - `manualAccountName` / `manualAccountCurrency` are supported by your backend to
+ *    create/find a manual account on the fly when `accountId` isn’t provided.
+ */
 export const updateTransaction = async (
   token: string,
   id: string,
-  data: Partial<
-    Pick<
-      Transaction,
-      "type" | "category" | "amount" | "date" | "description" | "accountId" | "accountName"
-    >
-  >
+  data: Partial<{
+    type: TxnType;
+    amount: number;
+    date: string; // local YYYY-MM-DD or ISO
+    description: string;
+
+    // 🔽 category updates
+    categoryId: string | null; // if provided, backend validates and sets both categoryId+category
+    category: string;          // plain name; backend will find-or-create and set both fields
+
+    // account scoping
+    accountId: string | null;
+    accountName: string | null;
+
+    // convenience for creating/selecting manual account by name
+    manualAccountName: string;
+    manualAccountCurrency: string;
+  }>
 ) => {
   const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
   return res.data;
@@ -141,8 +188,8 @@ export const fetchSummary = async (
   token: string,
   params: {
     granularity: Granularity;
-    startDate?: string;   // inclusive UTC ISO
-    endDate?: string;     // exclusive UTC ISO
+    startDate?: string; // inclusive UTC ISO
+    endDate?: string;   // exclusive UTC ISO
     accountId?: string;
     accountIds?: string;
   },
@@ -153,5 +200,14 @@ export const fetchSummary = async (
     params,
     signal,
   });
+  return data;
+};
+
+
+export const bulkCategorize = async (
+  token: string,
+  payload: { ids: string[]; categoryId?: string; categoryName?: string }
+): Promise<{ ok: boolean; matched: number; modified: number }> => {
+  const { data } = await http.post("/api/transactions/bulk-categorize", payload, auth(token));
   return data;
 };

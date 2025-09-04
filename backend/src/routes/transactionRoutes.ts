@@ -536,4 +536,65 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+
+router.post("/bulk-categorize", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(String(req.user));
+    const { ids, categoryId, categoryName } = req.body as {
+      ids: string[];                // array of txn _id strings
+      categoryId?: string;          // optional: existing Category _id
+      categoryName?: string;        // optional: create/find by name
+    };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "ids[] is required" });
+    }
+
+    // Resolve a final category id + name (mirrors your POST / route behavior)
+    let finalCategoryName = (categoryName || "").trim();
+    let finalCategoryId: Types.ObjectId | undefined;
+
+    if (categoryId) {
+      const cat = await Category.findOne({ _id: new Types.ObjectId(categoryId), userId });
+      if (!cat) return res.status(400).json({ error: "Invalid categoryId" });
+      finalCategoryId = new Types.ObjectId(String(cat._id));
+      finalCategoryName = cat.name;
+    } else if (finalCategoryName) {
+      const existing = await Category.findOne({ userId, name: finalCategoryName });
+      if (existing) {
+        finalCategoryId = new Types.ObjectId(String(existing._id));
+      } else {
+        const created = await Category.create({ userId, name: finalCategoryName });
+        finalCategoryId = new Types.ObjectId(String(created._id));
+      }
+    } else {
+      return res.status(400).json({ error: "Provide categoryId or categoryName" });
+    }
+
+    const objectIds = ids
+      .filter((s) => s && mongoose.isValidObjectId(s))
+      .map((s) => new Types.ObjectId(s));
+
+    if (objectIds.length === 0) {
+      return res.status(400).json({ error: "No valid transaction ids" });
+    }
+
+    const result = await Transaction.updateMany(
+      { _id: { $in: objectIds }, userId },
+      {
+        $set: {
+          category: finalCategoryName,
+          ...(finalCategoryId ? { categoryId: finalCategoryId } : {}),
+        },
+      }
+    );
+
+    res.json({ ok: true, matched: result.matchedCount, modified: result.modifiedCount });
+  } catch (err: any) {
+    console.error("❌ /bulk-categorize error:", err?.message || err);
+    res.status(500).json({ error: "Bulk categorize failed", details: err?.message || err });
+  }
+});
+
+
 export default router;
