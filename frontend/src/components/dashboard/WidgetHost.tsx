@@ -16,6 +16,7 @@ import type { WidgetType } from "../../features/widgets/widgetsSlice";
 import AdviceWidget from "../widgets/AdviceWidget";
 import PlaidLinkButton from "../PlaidLinkButton";
 import GoalsWidget from "../widgets/GoalsWidget";
+import CategoryPieWidget from "../widgets/CategoryPieWidget";
 
 const registry: Record<WidgetType, React.ComponentType> = {
   "plaid-connect":  PlaidLinkButton,
@@ -31,7 +32,8 @@ const registry: Record<WidgetType, React.ComponentType> = {
   "investments": InvestmentsWidget,
   "stocks-portfolio": StocksPortfolioWidget,
   "advice": AdviceWidget, 
-      "goals": GoalsWidget,                       // 👈 added
+      "goals": GoalsWidget,          
+        "category-pie": CategoryPieWidget,             // 👈 added
 };
 
 export default function WidgetHost({ type }: { type: WidgetType }) {

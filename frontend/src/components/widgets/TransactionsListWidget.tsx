@@ -2,7 +2,11 @@
 import React from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
-import { useQuery, keepPreviousData, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  keepPreviousData,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
 import {
   fetchTransactions,
@@ -16,9 +20,17 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
-import { formatUTC_MMDDYYYY, localYMD, toIsoStartEndExclusive } from "../../helpers/date";
+import {
+  formatUTC_MMDDYYYY,
+  localYMD,
+  toIsoStartEndExclusive,
+} from "../../helpers/date";
 import { listCategories, type Category } from "../../api/categories";
-import { CategoryIcon, DEFAULT_COLORS, hexToRgba } from "../icons/CategoryIcons";
+import {
+  CategoryIcon,
+  DEFAULT_COLORS,
+  hexToRgba,
+} from "../icons/CategoryIcons";
 import FilterPill from "../common/FilterPill";
 
 type Filter = "all" | "expense" | "income";
@@ -38,7 +50,11 @@ const glass =
   "rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
 
 const money = (n: number) =>
-  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
 
 function localRangeForPreset(p: Exclude<Preset, "custom">) {
   const today = new Date();
@@ -64,9 +80,12 @@ export default function TransactionsListWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
   const qc = useQueryClient();
 
-  const selectedAccountIdRaw = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+  const selectedAccountIdRaw = useSelector(
+    (s: RootState) => s.accountFilter.selectedAccountId
+  );
   const accountFilterId = React.useMemo(
-    () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
+    () =>
+      isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined,
     [selectedAccountIdRaw]
   );
 
@@ -86,7 +105,10 @@ export default function TransactionsListWidget() {
 
   // Selection state: highlight rows by click / dblclick to categorize
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
-  const selectedIds = React.useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+  const selectedIds = React.useMemo(
+    () => Object.keys(selected).filter((k) => selected[k]),
+    [selected]
+  );
 
   // Distinguish click vs double-click
   const clickTimer = React.useRef<number | null>(null);
@@ -108,7 +130,9 @@ export default function TransactionsListWidget() {
   }, [preset]);
 
   // Accounts
-  const { data: accountsRaw } = useQuery<PlaidAccount[] | { accounts: PlaidAccount[] }>({
+  const { data: accountsRaw } = useQuery<
+    PlaidAccount[] | { accounts: PlaidAccount[] }
+  >({
     queryKey: ["accounts"],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
@@ -152,7 +176,11 @@ export default function TransactionsListWidget() {
   const accounts = React.useMemo<PlaidAccount[]>(() => {
     const raw = accountsRaw as unknown;
     if (Array.isArray(raw)) return raw;
-    if (raw && typeof raw === "object" && Array.isArray((raw as any).accounts)) {
+    if (
+      raw &&
+      typeof raw === "object" &&
+      Array.isArray((raw as any).accounts)
+    ) {
       return (raw as any).accounts as PlaidAccount[];
     }
     return [];
@@ -170,7 +198,11 @@ export default function TransactionsListWidget() {
     return toIsoStartEndExclusive(startDate, endDate);
   }, [startDate, endDate]);
 
-  const { data: txRes, isError, isFetching } = useQuery<PagedTransactionsResponse>({
+  const {
+    data: txRes,
+    isError,
+    isFetching,
+  } = useQuery<PagedTransactionsResponse>({
     queryKey: [
       "transactions",
       "list",
@@ -230,8 +262,6 @@ export default function TransactionsListWidget() {
       </div>
     );
 
-
-
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
@@ -253,7 +283,8 @@ export default function TransactionsListWidget() {
   };
 
   // -------- Selection & categorize handlers (no checkboxes) --------
-  const toggleRow = (id: string) => setSelected((m) => ({ ...m, [id]: !m[id] }));
+  const toggleRow = (id: string) =>
+    setSelected((m) => ({ ...m, [id]: !m[id] }));
   const clearSelection = () => setSelected({});
 
   const doCategorize = async (ids: string[]) => {
@@ -290,8 +321,11 @@ export default function TransactionsListWidget() {
         <div className="sticky top-0 z-10 mb-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white backdrop-blur-md ring-1 ring-white/10">
           <div className="flex items-center justify-between">
             <div>
-              <span className="font-medium">{selectedIds.length}</span> selected —{" "}
-              <span className="text-white/70">double-click any selected row to set a category</span>
+              <span className="font-medium">{selectedIds.length}</span> selected
+              —{" "}
+              <span className="text-white/70">
+                double-click any selected row to set a category
+              </span>
             </div>
             <button
               onClick={clearSelection}
@@ -312,7 +346,10 @@ export default function TransactionsListWidget() {
           </div>
           {accountIdParam ? (
             <div className="mt-1 text-[11px] text-white/60">
-              Account: <span className="text-white">{accMap.get(accountIdParam) || "Selected account"}</span>
+              Account:{" "}
+              <span className="text-white">
+                {accMap.get(accountIdParam) || "Selected account"}
+              </span>
             </div>
           ) : (
             <div className="mt-1 text-[11px] text-white/40">All accounts</div>
@@ -321,13 +358,25 @@ export default function TransactionsListWidget() {
 
         <div className="flex items-center gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <FilterPill label="All" value="all" active={filter === "all"} onClick={setFilter} />
-      <FilterPill label="Spending" value="expense" active={filter === "expense"} onClick={setFilter} />
-      <FilterPill label="Income" value="income" active={filter === "income"} onClick={setFilter} />
+            <FilterPill
+              label="All"
+              value="all"
+              active={filter === "all"}
+              onClick={setFilter}
+            />
+            <FilterPill
+              label="Spending"
+              value="expense"
+              active={filter === "expense"}
+              onClick={setFilter}
+            />
+            <FilterPill
+              label="Income"
+              value="income"
+              active={filter === "income"}
+              onClick={setFilter}
+            />
           </div>
-
-      
-    
         </div>
       </div>
 
@@ -379,7 +428,11 @@ export default function TransactionsListWidget() {
               Reset
             </button>
 
-            {dateError && <span className="text-[11px] text-rose-300 ml-2">{dateError}</span>}
+            {dateError && (
+              <span className="text-[11px] text-rose-300 ml-2">
+                {dateError}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -391,7 +444,12 @@ export default function TransactionsListWidget() {
       {!isError && transactions.length === 0 && (
         <div className="text-white/70">
           No results for <b>{filter === "all" ? "all types" : filter}</b>
-          {accountIdParam && <> in <b>{accMap.get(accountIdParam) || "selected account"}</b></>}{" "}
+          {accountIdParam && (
+            <>
+              {" "}
+              in <b>{accMap.get(accountIdParam) || "selected account"}</b>
+            </>
+          )}{" "}
           between <b>{startDate}</b> and <b>{endDate}</b>.
         </div>
       )}
@@ -426,7 +484,9 @@ export default function TransactionsListWidget() {
                   onDoubleClick={() => handleDoubleClick(t._id)}
                   className={[
                     "py-3 flex items-center gap-4 cursor-pointer select-none rounded-lg",
-                    isSelected ? "bg-white/10 ring-1 ring-white/20 shadow-inner" : "hover:bg-white/5",
+                    isSelected
+                      ? "bg-white/10 ring-1 ring-white/20 shadow-inner"
+                      : "hover:bg-white/5",
                   ].join(" ")}
                 >
                   <div className="shrink-0">
@@ -492,7 +552,8 @@ export default function TransactionsListWidget() {
           {/* Pagination */}
           <div className="mt-4 flex items-center justify-between">
             <div className="text-xs text-white/60">
-              Showing <span className="text-white">{from}</span>–<span className="text-white">{to}</span> of{" "}
+              Showing <span className="text-white">{from}</span>–
+              <span className="text-white">{to}</span> of{" "}
               <span className="text-white">{total}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -505,7 +566,8 @@ export default function TransactionsListWidget() {
                 Prev
               </button>
               <div className="text-xs text-white/70">
-                Page <span className="text-white">{page}</span> / <span className="text-white">{pages}</span>
+                Page <span className="text-white">{page}</span> /{" "}
+                <span className="text-white">{pages}</span>
               </div>
               <button
                 onClick={() => setPage((p) => Math.min(pages, p + 1))}

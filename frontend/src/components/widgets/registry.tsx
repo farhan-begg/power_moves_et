@@ -16,6 +16,7 @@ import type { WidgetType } from "../../features/widgets/widgetsSlice";
 import AdviceWidget from "./AdviceWidget";
 import PlaidLinkButton from "../PlaidLinkButton";
 import GoalsWidget from "./GoalsWidget";
+import CategoryPieWidget from "./CategoryPieWidget";
 
 export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
   "plaid-connect": PlaidLinkButton,
@@ -32,4 +33,5 @@ export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
   "stocks-portfolio": StocksPortfolioWidget,
   "advice": AdviceWidget,       
         "goals": GoalsWidget,       // 👈 added
+          "category-pie": CategoryPieWidget,
 };

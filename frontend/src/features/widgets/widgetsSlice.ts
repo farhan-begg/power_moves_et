@@ -15,7 +15,9 @@ export type WidgetType =
   | "investments"
   | "stocks-portfolio"
   | "advice"
-  | "goals"; // 👈 added
+  | "goals"
+  // 👇 NEW
+  | "category-pie";
 
 export type WidgetSize = "sm" | "lg";
 
@@ -40,23 +42,27 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w2:  { id: "w2",  type: "stat-today",           title: "Today",               size: "sm" },
   w3:  { id: "w3",  type: "stat-month",           title: "This Month",          size: "sm" },
   w4:  { id: "w4",  type: "stat-year",            title: "Year to Date",        size: "sm" },
-  w5:  { id: "w5",  type: "income-expense-chart", title: "Income vs Expense",   size: "lg" }, // wide by default
+  w5:  { id: "w5",  type: "income-expense-chart", title: "Income vs Expense",   size: "lg" },
   w6:  { id: "w6",  type: "bank-flow",            title: "Bank Flow",           size: "sm" },
   w7:  { id: "w7",  type: "transactions-list",    title: "Recent Spending",     size: "sm" },
   w8:  { id: "w8",  type: "net-worth",            title: "Net Worth",           size: "sm" },
-  w9:  { id: "w9",  type: "accounts",             title: "Accounts",            size: "lg" }, // wide by default
+  w9:  { id: "w9",  type: "accounts",             title: "Accounts",            size: "lg" },
   w10: { id: "w10", type: "cards",                title: "Credit Cards",        size: "sm" },
   w11: { id: "w11", type: "investments",          title: "Investments",         size: "sm" },
   w12: { id: "w12", type: "stocks-portfolio",     title: "Stocks & ETFs",       size: "sm" },
   w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" },
-  w14: { id: "w14", type: "goals",                title: "Goals",               size: "sm" }, // 👈 new default
+  w14: { id: "w14", type: "goals",                title: "Goals",               size: "sm" },
+  // 👇 NEW default
+  w15: { id: "w15", type: "category-pie",         title: "Category Summary",    size: "sm" },
 };
 
 export const DEFAULT_ORDER = [
   "w1","w2","w3","w4",
-  "w8",          // Net Worth
-  "w14",         // 👈 Goals (placed near Net Worth)
+  "w8",
+  "w14",
   "w5","w7",
+  // 👇 place category pie near spending
+  "w15",
   "w9","w12",
   "w10","w11",
   "w13",
