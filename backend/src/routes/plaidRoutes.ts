@@ -182,34 +182,27 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
     const { data } = await plaidClient.accountsBalanceGet({ access_token: accessToken });
     let accounts = data.accounts;
 
-    // If filtering, keep only the requested Plaid account
     if (filterAccountId) {
       accounts = accounts.filter(
-        (a) =>
-          a.account_id === filterAccountId ||
-          (a as any).accountId === filterAccountId
+        (a) => a.account_id === filterAccountId || (a as any).accountId === filterAccountId
       );
-      // Note: when filterAccountId is a "manual:*" id, this will simply result in an empty array,
-      // which is correct (no Plaid balances for manual-only accounts).
     }
 
     const sum = (arr: number[]) => arr.reduce((s, n) => s + (Number.isFinite(n) ? n : 0), 0);
 
-    // ------- Plaid assets (depository + investment) -------
+    // assets
     const assetTypes = new Set(["depository", "investment"]);
     const assetsPlaid = sum(
       accounts.filter((a) => assetTypes.has(a.type as any)).map((a) => a.balances.current || 0)
     );
 
-    // ------- Plaid debts (credit + loan) -------
+    // debts
     const debtTypes = new Set(["credit", "loan"]);
     let debts = sum(
-      accounts
-        .filter((a) => debtTypes.has(a.type as any))
-        .map((a) => Math.max(a.balances.current || 0, 0))
+      accounts.filter((a) => debtTypes.has(a.type as any)).map((a) => Math.max(a.balances.current || 0, 0))
     );
 
-    // Try refining debts with Liabilities for only the filtered accounts
+    // refine with Liabilities if available
     try {
       const liab = await plaidClient.liabilitiesGet({ access_token: accessToken });
       const credit = liab.data.liabilities?.credit ?? [];
@@ -247,34 +240,26 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
 
       debts = creditSum + studentSum + mortgageSum;
     } catch {
-      /* fall back to account balances if Liabilities not available */
+      /* ignore; fall back to balances */
     }
 
-    // --------- Manual pieces (respect account filter) ---------
+    // manual pieces
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
-    // (1) Manual cash from manual transactions (income - expense)
-    // If an account is selected -> only that account's manual txns
-    // If "All accounts" -> include ALL manual txns (both linked and global)
     const manualTxnMatch: any = { userId, source: "manual" };
-    if (filterAccountId) {
-      manualTxnMatch.accountId = filterAccountId; // ONLY that account
-    }
+    if (filterAccountId) manualTxnMatch.accountId = filterAccountId;
     const manualAgg = await Transaction.aggregate([
       { $match: manualTxnMatch },
       {
         $group: {
           _id: null,
           income: { $sum: { $cond: [{ $eq: ["$type", "income"] }, "$amount", 0] } },
-          expense:{ $sum: { $cond: [{ $eq: ["$type", "expense"]}, "$amount", 0] } },
+          expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
         },
       },
     ]);
     const manualCash = (manualAgg[0]?.income || 0) - (manualAgg[0]?.expense || 0);
 
-    // (2) Manual assets
-    // If an account is selected -> include ONLY account-scoped assets for that account
-    // If "All accounts" -> include ALL manual assets (global + account-scoped)
     let manualAssetsTotal = 0;
     if (filterAccountId) {
       const accAssets = await ManualAsset.aggregate([
@@ -284,18 +269,15 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
       manualAssetsTotal = accAssets[0]?.total ?? 0;
     } else {
       const allAssets = await ManualAsset.aggregate([
-        { $match: { userId } }, // global + any account-scoped
+        { $match: { userId } },
         { $group: { _id: null, total: { $sum: "$value" } } },
       ]);
       manualAssetsTotal = allAssets[0]?.total ?? 0;
     }
 
-    // --------- Compose result ---------
     const assetsWithManual = assetsPlaid + manualCash + manualAssetsTotal;
     const netWorth = assetsWithManual - debts;
 
-    // Breakdown: include only balances for the currently selected Plaid accounts
-    // and add the manual pieces relevant to the current view.
     const breakdownByType: Record<string, number> = {};
     for (const a of accounts) {
       const key = a.type || "other";
@@ -340,11 +322,9 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     const { accountId, accountIds } = req.query as { accountId?: string; accountIds?: string };
     const idsFromCSV = (accountIds || "")
       .split(",")
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean);
-    const wantedAccountIds = accountId
-      ? Array.from(new Set([accountId, ...idsFromCSV]))
-      : idsFromCSV;
+    const wantedAccountIds = accountId ? Array.from(new Set([accountId, ...idsFromCSV])) : idsFromCSV;
 
     // fetch accounts to map names
     const accountsResp = await plaidClient.accountsBalanceGet({ access_token: accessToken });
@@ -362,11 +342,10 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
     const plaidTransactions = plaidResponse.data.transactions;
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
-    // normalize for Mongo (including accountId + accountName)
+    // normalize for Mongo (including plaidTxId)
     const formatted = plaidTransactions.map((txn: any) => {
       const acc = txn.account_id ? accountsById.get(txn.account_id) : undefined;
-      const accountName =
-        acc?.name || acc?.official_name || acc?.subtype || acc?.type || undefined;
+      const accountName = acc?.name || acc?.official_name || acc?.subtype || acc?.type || undefined;
 
       return {
         userId,
@@ -382,27 +361,34 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
         source: "plaid" as const,
         accountId: txn.account_id ?? undefined,
         accountName,
+        plaidTxId: txn.transaction_id, // 👈 keep original Plaid id
       };
     });
 
-    // upsert; include accountId in the uniqueness key
-    const ops = formatted.map((t) => ({
-      updateOne: {
-        filter: {
-          userId: t.userId,
-          date: t.date,
-          amount: t.amount,
-          description: t.description,
-          source: "plaid",
-          accountId: t.accountId ?? null,
+    // upsert by plaidTxId (best dedupe key). Fallback to composite if missing.
+    const ops = formatted.map((t) => {
+      const filter = t.plaidTxId
+        ? { userId: t.userId, plaidTxId: t.plaidTxId }
+        : {
+            userId: t.userId,
+            date: t.date,
+            amount: t.amount,
+            description: t.description,
+            source: "plaid",
+            accountId: t.accountId ?? null,
+          };
+      return {
+        updateOne: {
+          filter,
+          update: { $setOnInsert: t },
+          upsert: true,
         },
-        update: { $setOnInsert: t },
-        upsert: true,
-      },
-    }));
+      };
+    });
+
     if (ops.length) await Transaction.bulkWrite(ops, { ordered: false });
 
-    // 🔁 fire-and-forget backfill to ensure any older rows get accountId/accountName
+    // 🔁 optional: kick a background accountId/name backfill
     setImmediate(async () => {
       try {
         const result = await runAccountIdBackfillForUser(String(req.user), 30);
@@ -411,6 +397,19 @@ router.get("/transactions", protect, async (req: AuthRequest, res: Response) => 
         console.warn("⚠️ Backfill after sync failed:", (e as any)?.message || e);
       }
     });
+
+    // (Optional) If you want to auto-run recurring detection here, call your service.
+    // setImmediate(async () => {
+    //   try {
+    //     await fetch(`http://localhost:${process.env.PORT || 5000}/api/recurring/detect`, {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json", Authorization: req.headers.authorization || "" },
+    //       body: JSON.stringify({ lookbackDays: 45 }),
+    //     });
+    //   } catch (e) {
+    //     console.warn("⚠️ Post-sync recurring detection failed:", (e as any)?.message || e);
+    //   }
+    // });
 
     // return from Mongo (respect same filter)
     const mongoQuery: any = { userId };

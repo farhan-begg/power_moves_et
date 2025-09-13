@@ -5,6 +5,7 @@ import axios from "axios";
 import { useSelector } from "react-redux";
 import { RootState } from "../app/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { syncPlaidTransactions } from "../api/plaid";
 
 type LinkTokenRes = { link_token: string };
 type UserInfo = {
@@ -21,7 +22,7 @@ export default function PlaidLinkButton() {
   const [linkToken, setLinkToken] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
-  // Check if user already linked
+  // ✅ Check if user already linked
   const { data: userInfo } = useQuery<UserInfo>({
     queryKey: ["userInfo"],
     enabled: Boolean(token),
@@ -35,11 +36,11 @@ export default function PlaidLinkButton() {
 
   const isLinked = Boolean(userInfo?.plaidAccessToken);
 
-  // 1) Create link token (use correct route)
+  // ✅ Create link token
   const createLinkToken = useMutation({
     mutationFn: async () => {
       const { data } = await axios.post<LinkTokenRes>(
-        "/api/plaid/link-token", // ✅ match backend
+        "/api/plaid/link-token",
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -50,28 +51,41 @@ export default function PlaidLinkButton() {
       setErrorMsg(err?.response?.data?.error || "Failed to create link token"),
   });
 
-  // 2) Exchange public token (use correct route)
+  // ✅ Exchange public token
   const exchangePublicToken = useMutation({
     mutationFn: async (public_token: string) => {
       await axios.post(
-        "/api/plaid/exchange-public-token", // ✅ match backend
+        "/api/plaid/exchange-public-token",
         { public_token },
         { headers: { Authorization: `Bearer ${token}` } }
       );
     },
     onSuccess: async () => {
+      try {
+        // Do an immediate sync (optional but recommended)
+        if (token) await syncPlaidTransactions(token);
+      } catch (e) {
+        console.error("❌ Initial sync failed:", e);
+      }
+
+      // Update react-query caches
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["userInfo"] }),
         qc.invalidateQueries({ queryKey: ["accounts"] }),
         qc.invalidateQueries({ queryKey: ["transactions"] }),
+        qc.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
       ]);
+
+      // Broadcast event for dashboard
+      window.dispatchEvent(new Event("plaid:linked"));
     },
     onError: (err: any) =>
       setErrorMsg(err?.response?.data?.error || "Failed to link account"),
   });
 
+  // Automatically create link token on mount if not linked
   React.useEffect(() => {
-    if (token && !isLinked) {
+    if (token && !isLinked && !createLinkToken.isPending) {
       createLinkToken.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

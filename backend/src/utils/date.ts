@@ -22,8 +22,60 @@ export function utcRangeForYmd(startYMD?: string, endYMD?: string) {
 
 /** Safe parse ISO or Y-M-D into a Date (UTC for Y-M-D). */
 export function parseDateFlexible(s: string) {
-  // Y-M-D (10 chars) → UTC midnight
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return ymdToUtcDate(s);
-  // Otherwise let Date parse ISO timestamp
   return new Date(s);
+}
+
+/** Reset a Date to local midnight (like date-fns startOfDay). */
+export function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Add N days to a date (returns a new Date). */
+export function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/** Add N months to a date (returns a new Date). */
+export function addMonths(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setMonth(x.getMonth() + n);
+  return x;
+}
+
+/**
+ * Compute next due date given a cadence string.
+ * Supports: weekly, biweekly, semimonthly, monthly, quarterly, yearly, unknown.
+ */
+export function bumpNextDue(from: Date, cadence: string, dayOfMonth?: number): Date | undefined {
+  if (!from) return undefined;
+  const base = new Date(from);
+
+  switch (cadence) {
+    case "weekly":
+      return addDays(base, 7);
+    case "biweekly":
+      return addDays(base, 14);
+    case "semimonthly": {
+      const d = base.getDate();
+      const nextHalf = d < 15 ? 15 : 1;
+      const monthBump = d < 15 ? 0 : 1;
+      return new Date(base.getFullYear(), base.getMonth() + monthBump, nextHalf);
+    }
+    case "monthly":
+    case "unknown": {
+      const dom = Math.min(Math.max(dayOfMonth ?? base.getDate(), 1), 28);
+      return new Date(base.getFullYear(), base.getMonth() + 1, dom);
+    }
+    case "quarterly":
+      return addMonths(base, 3);
+    case "yearly":
+      return addMonths(base, 12);
+    default:
+      return undefined;
+  }
 }

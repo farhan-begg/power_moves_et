@@ -12,7 +12,7 @@ import adviceRoutes from "./routes/adviceRoutes";
 import goalRoutes from "./routes/goalRoutes";
 import manualAccountRoutes from "./routes/manualAccountRoutes";
 import categoryRoutes from "./routes/categoryRoutes";
-
+import recurringRoutes from "./routes/recurringRoutes";
 
 dotenv.config();
 
@@ -51,11 +51,21 @@ app.use("/api/advice", adviceRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/manual-accounts", manualAccountRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/recurring", recurringRoutes);
 
-// Health root
-app.get("/", (_req: Request, res: Response) => {
-  res.send("🚀 Expense Tracker Backend is Running!");
-});
+const RUN_DAILY_MS = 24 * 60 * 60 * 1000;
+setTimeout(() => {
+  setInterval(async () => {
+    try {
+      // If you want all users, iterate users here. For now, skip.
+      // This example is a stub; you likely want a worker/queue.
+      console.log("⏰ (stub) daily recurring detection");
+    } catch (e) {
+      console.error("daily detector failed:", e);
+    }
+  }, RUN_DAILY_MS);
+}, 2 * 60 * 1000);
+
 
 /* ---------- 404 + Error Handlers ---------- */
 // 404 for unknown API routes (after all routers)

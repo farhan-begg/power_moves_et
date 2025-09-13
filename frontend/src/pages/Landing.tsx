@@ -33,7 +33,6 @@ const Section = ({
   <section
     id={id}
     className={[
-      // keeps section below sticky header on #hash navigation
       "relative py-20 sm:py-28 scroll-mt-20 sm:scroll-mt-24",
       "bg-transparent",
       className,
@@ -43,11 +42,10 @@ const Section = ({
   </section>
 );
 
-/** Rich 3D background with depth planes + glow discs */
+/** Always-on subtle 3D background (no changes) */
 function Background3D() {
   return (
     <div className="pointer-events-none fixed inset-0 -z-20">
-      {/* soft radial wash */}
       <div
         className="absolute inset-0"
         style={{
@@ -56,10 +54,10 @@ function Background3D() {
           filter: "saturate(1.05)",
         }}
       />
-
-      {/* 3D group */}
-      <div className="absolute inset-0" style={{ transformStyle: "preserve-3d", perspective: "1200px" }}>
-        {/* far grid (deep) */}
+      <div
+        className="absolute inset-0"
+        style={{ transformStyle: "preserve-3d", perspective: "1200px" }}
+      >
         <div
           data-bg-grid
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.07]"
@@ -70,12 +68,11 @@ function Background3D() {
               "linear-gradient(rgba(255,255,255,0.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.7) 1px, transparent 1px)",
             backgroundSize: "40px 40px",
             borderRadius: 32,
-            transform: "translateZ(-480px) rotateX(58deg) rotateZ(-20deg) translateY(8vh)",
+            transform:
+              "translateZ(-480px) rotateX(58deg) rotateZ(-20deg) translateY(8vh)",
             willChange: "transform",
           }}
         />
-
-        {/* mid “glass” planes */}
         <div
           data-bg-plane-1
           className="absolute rounded-[28px] opacity-[0.12]"
@@ -106,8 +103,6 @@ function Background3D() {
             willChange: "transform",
           }}
         />
-
-        {/* glow discs (near) */}
         <div
           data-bg-disc-1
           className="absolute h-[58vmin] w-[58vmin] rounded-full blur-3xl opacity-90"
@@ -132,8 +127,6 @@ function Background3D() {
             willChange: "transform",
           }}
         />
-
-        {/* subtle grain overlay */}
         <div
           aria-hidden
           className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
@@ -146,6 +139,75 @@ function Background3D() {
     </div>
   );
 }
+/* ---------- Hover-only background shots (debug with text) ---------- */
+/* ---------- Hover-only background shots (IMAGES) ---------- */
+/* Files must exist at:
+   public/landing/shot-wide-1.png
+   public/landing/shot-accounts.png
+   public/landing/shot-cards-coach.png
+   public/landing/shot-analytics.png
+*/
+function BackgroundHoverShots({
+  show,
+  mx,
+  my,
+}: {
+  show: boolean;
+  mx: number;
+  my: number;
+}) {
+  const t = (x: number, y: number) => `translate3d(${x * mx}px, ${y * my}px, 0)`;
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10">
+      {/* slight darkening so shots sit behind content */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/60" />
+
+      <div
+        className={`absolute inset-0 transition-opacity duration-500 ${
+          show ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        {/* wide top-left */}
+        <img
+          src="/landing/shot-wide-1.png"
+          alt=""
+          className="absolute top-10 left-6 w-[46vw] max-w-[980px] rounded-2xl ring-1 ring-white/10 mix-blend-screen opacity-[0.14] select-none"
+          style={{ transform: t(-6, -2) }}
+          loading="eager"
+        />
+
+        {/* accounts top-right */}
+        <img
+          src="/landing/shot-accounts.png"
+          alt=""
+          className="absolute top-24 right-10 w-[34vw] max-w-[720px] rounded-2xl ring-1 ring-white/10 mix-blend-screen opacity-[0.14] select-none"
+          style={{ transform: t(5, -1) }}
+          loading="lazy"
+        />
+
+        {/* cards/coach bottom-left */}
+        <img
+          src="/landing/shot-cards-coach.png"
+          alt=""
+          className="absolute bottom-16 left-10 w-[32vw] max-w-[680px] rounded-2xl ring-1 ring-white/10 mix-blend-screen opacity-[0.12] select-none"
+          style={{ transform: t(-4, 2) }}
+          loading="lazy"
+        />
+
+        {/* analytics bottom-right */}
+        <img
+          src="/landing/shot-analytics.png"
+          alt=""
+          className="absolute bottom-8 right-8 w-[44vw] max-w-[980px] rounded-2xl ring-1 ring-white/10 mix-blend-screen opacity-[0.12] select-none"
+          style={{ transform: t(6, 3) }}
+          loading="lazy"
+        />
+      </div>
+    </div>
+  );
+}
+
 
 /* ---------------- page ---------------- */
 
@@ -153,16 +215,23 @@ export default function LandingPage() {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  // hover state + mouse-based parallax for the panels
+  const [hovering, setHovering] = React.useState(false);
+  const [mouse, setMouse] = React.useState({ x: 0, y: 0 });
+  const onMove = (e: React.PointerEvent) => {
+    const nx = (e.clientX / window.innerWidth) * 2 - 1; // -1..1
+    const ny = (e.clientY / window.innerHeight) * 2 - 1;
+    setMouse({ x: nx * 8, y: ny * 6 }); // tweak strength
+  };
+
   React.useLayoutEffect(() => {
     const mm = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (mm.matches) return;
 
     const ctx = gsap.context(() => {
-      // Keep ST measurements accurate
       const refresh = () => ScrollTrigger.refresh();
       window.addEventListener("load", refresh);
 
-      // Batched reveals (no anchor hijack)
       ScrollTrigger.batch("[data-reveal]", {
         start: "top 92%",
         onEnter: (batch) =>
@@ -189,7 +258,6 @@ export default function LandingPage() {
           }),
       });
 
-      // Parallax cards
       gsap.utils.toArray<HTMLElement>("[data-parallax]").forEach((el) => {
         const amt = Number(el.dataset.parallax) || 40;
         gsap.to(el, {
@@ -208,7 +276,6 @@ export default function LandingPage() {
         el.style.transform = "translateZ(0)";
       });
 
-      // Story progress bar
       const progressBar = document.querySelector(".pm-progress");
       if (progressBar) {
         (progressBar as HTMLElement).style.willChange = "width";
@@ -225,7 +292,6 @@ export default function LandingPage() {
         });
       }
 
-      // Background scroll parallax (subtle)
       const grid = document.querySelector<HTMLElement>("[data-bg-grid]");
       const disc1 = document.querySelector<HTMLElement>("[data-bg-disc-1]");
       const disc2 = document.querySelector<HTMLElement>("[data-bg-disc-2]");
@@ -254,13 +320,12 @@ export default function LandingPage() {
         });
       }
 
-      // -------- Mouse parallax depth (no anchor interference) --------
       const lerp = { x: 0, y: 0 };
       const onPointerMove = (e: PointerEvent) => {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const tx = (e.clientX / vw) * 2 - 1; // -1..1
-        const ty = (e.clientY / vh) * 2 - 1; // -1..1
+        const tx = (e.clientX / vw) * 2 - 1;
+        const ty = (e.clientY / vh) * 2 - 1;
         lerp.x += (tx - lerp.x) * 0.12;
         lerp.y += (ty - lerp.y) * 0.12;
       };
@@ -289,7 +354,9 @@ export default function LandingPage() {
           }deg) translate(${lerp.x * -8}vw, ${lerp.y * -3}vh)`;
         }
         if (d1El) {
-          d1El.style.transform = `translateZ(-180px) translate(${lerp.x * 12}vw, ${lerp.y * 6}vh)`;
+          d1El.style.transform = `translateZ(-180px) translate(${lerp.x * 12}vw, ${
+            lerp.y * 6
+          }vh)`;
         }
         if (d2El) {
           d2El.style.transform = `translateZ(-200px) translate(${lerp.x * -10}vw, ${
@@ -299,7 +366,6 @@ export default function LandingPage() {
       };
       gsap.ticker.add(tick);
 
-      // Cleanup listeners
       return () => {
         window.removeEventListener("load", refresh);
         window.removeEventListener("pointermove", onPointerMove);
@@ -314,8 +380,16 @@ export default function LandingPage() {
   const toLogin = () => navigate("/login");
 
   return (
-    <div ref={rootRef} className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white">
+    <div
+      ref={rootRef}
+      className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white"
+      onPointerEnter={() => setHovering(true)}
+      onPointerLeave={() => setHovering(false)}
+      onPointerMove={onMove}
+    >
       <Background3D />
+
+
 
       {/* NAV */}
       <header
@@ -326,6 +400,7 @@ export default function LandingPage() {
           willChange: "transform",
         }}
       >
+   
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="h-16 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -372,12 +447,19 @@ export default function LandingPage() {
                 className="inline-flex items-center gap-2 rounded-full bg-white/5 ring-1 ring-white/10 px-2.5 py-1.5 text-xs text-white/70 mb-4"
                 data-reveal
               >
+
                 <SparklesIcon className="h-4 w-4" />
                 Built for clarity, speed & scale
               </div>
-              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight" data-reveal>
+              <h1
+                className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight"
+                data-reveal
+              >
                 Make every dollar a <span className="text-emerald-300">Power Move</span>.
               </h1>
+
+                         {/* 🔵 The hover-only background text panels */}
+      <BackgroundHoverShots show={hovering} mx={mouse.x} my={mouse.y} />
               <p className="mt-4 text-white/70 max-w-xl" data-reveal>
                 PowerMoves is a modern money OS that unifies your accounts, categorizes spending,
                 turns transactions into insight, and turns insight into action. From real-time cash
@@ -439,31 +521,54 @@ export default function LandingPage() {
       {/* FEATURES */}
       <Section id="features">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <HeaderEyebrow title="Features" subtitle="Everything you need to master your money" />
+          <HeaderEyebrow
+            title="Features"
+            subtitle="Everything you need to master your money"
+          />
           <div className="mt-10 grid md:grid-cols-3 gap-4">
             <FeatureCard
               icon={<InboxArrowDownIcon className="h-5 w-5 text-emerald-300" />}
               title="Seamless Sync"
-              bullets={["Plaid-powered imports", "Account-aware backfills", "One-click refresh"]}
+              bullets={[
+                "Plaid-powered imports",
+                "Account-aware backfills",
+                "One-click refresh",
+              ]}
             />
             <FeatureCard
               icon={<AdjustmentsHorizontalIcon className="h-5 w-5 text-cyan-300" />}
               title="Global Filters"
-              bullets={["Filter by any account", "Dates & presets", "Income / Expense views"]}
+              bullets={[
+                "Filter by any account",
+                "Dates & presets",
+                "Income / Expense views",
+              ]}
             />
             <FeatureCard
               icon={<ShieldCheckIcon className="h-5 w-5 text-emerald-300" />}
               title="Privacy First"
-              bullets={["Local UI speed, secure APIs", "Field-level validations", "Least-privilege access"]}
+              bullets={[
+                "Local UI speed, secure APIs",
+                "Field-level validations",
+                "Least-privilege access",
+              ]}
             />
           </div>
 
-          {/* Screens / imagery */}
           <div className="mt-12 grid lg:grid-cols-2 gap-6">
-            <ImageCard src="/images/assets.png" caption="Crystal clear insights with elegant glass UI." />
-            <div className="rounded-2xl overflow-hidden ring-1 ring-white/10 bg-white/5" data-reveal>
+            <ImageCard
+              src="/landing/shot-analytics.png"
+              caption="Crystal clear insights with elegant glass UI."
+            />
+            <div
+              className="rounded-2xl overflow-hidden ring-1 ring-white/10 bg-white/5"
+              data-reveal
+            >
               <div className="relative h-64">
-                <VideoCard src="/video/stock.mp4" caption="" />
+                         <ImageCard
+              src="/landing/shot-cards-coach.png"
+              caption="Crystal clear insights with elegant glass UI."
+            />
               </div>
             </div>
           </div>
@@ -476,11 +581,26 @@ export default function LandingPage() {
           <div className="relative">
             <div className="absolute top-0 left-0 h-0.5 w-0 bg-emerald-400/70 rounded pm-progress" />
           </div>
-          <HeaderEyebrow title="From Chaos to Clarity" subtitle="A calm narrative for your money" />
+          <HeaderEyebrow
+            title="From Chaos to Clarity"
+            subtitle="A calm narrative for your money"
+          />
           <div className="mt-10 grid md:grid-cols-3 gap-6">
-            <StoryStep step="01" title="Connect" text="Securely link your institutions. We fetch balances and transactions for a unified view." />
-            <StoryStep step="02" title="Understand" text="We categorize, summarize, and visualize. Patterns pop. Decisions simplify." />
-            <StoryStep step="03" title="Act" text="Automate savings, prune waste, and deploy capital like a pro. Every move, a power move." />
+            <StoryStep
+              step="01"
+              title="Connect"
+              text="Securely link your institutions. We fetch balances and transactions for a unified view."
+            />
+            <StoryStep
+              step="02"
+              title="Understand"
+              text="We categorize, summarize, and visualize. Patterns pop. Decisions simplify."
+            />
+            <StoryStep
+              step="03"
+              title="Act"
+              text="Automate savings, prune waste, and deploy capital like a pro. Every move, a power move."
+            />
           </div>
         </div>
       </Section>
@@ -488,14 +608,21 @@ export default function LandingPage() {
       {/* PRICING */}
       <Section id="pricing">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <HeaderEyebrow title="Pricing" subtitle="Simple, transparent, value-packed" />
+          <HeaderEyebrow
+            title="Pricing"
+            subtitle="Simple, transparent, value-packed"
+          />
           <div className="mt-10 grid md:grid-cols-3 gap-6">
             <PriceCard
               name="Starter"
               price="$0"
               period="forever"
               cta="Start Free"
-              features={["Unlimited manual transactions", "Core dashboards", "Email support"]}
+              features={[
+                "Unlimited manual transactions",
+                "Core dashboards",
+                "Email support",
+              ]}
               onClick={toApp}
             />
             <PriceCard
@@ -505,7 +632,11 @@ export default function LandingPage() {
               period="/mo"
               cta="Upgrade to Pro"
               featured
-              features={["Plaid sync", "Advanced filters & exports", "Priority support"]}
+              features={[
+                "Plaid sync",
+                "Advanced filters & exports",
+                "Priority support",
+              ]}
               onClick={toApp}
             />
             <PriceCard
@@ -513,7 +644,11 @@ export default function LandingPage() {
               price="Let's talk"
               period=""
               cta="Contact Sales"
-              features={["Multi-user & roles", "Custom dashboards", "SLAs & SSO"]}
+              features={[
+                "Multi-user & roles",
+                "Custom dashboards",
+                "SLAs & SSO",
+              ]}
               onClick={() => window.alert("sales@powermoves.app")}
             />
           </div>
@@ -523,11 +658,26 @@ export default function LandingPage() {
       {/* TESTIMONIALS */}
       <Section id="testimonials">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <HeaderEyebrow title="Stories" subtitle="Builders, freelancers, and families love PowerMoves" />
+          <HeaderEyebrow
+            title="Stories"
+            subtitle="Builders, freelancers, and families love PowerMoves"
+          />
           <div className="mt-10 grid md:grid-cols-3 gap-6">
-            <Testimonial quote="PowerMoves turned my finances from a fog into a flight plan." name="Ava M." title="Product Designer" />
-            <Testimonial quote="It’s the first money app that feels both serious and simple." name="Noah T." title="Indie Dev" />
-            <Testimonial quote="We finally see our month at a glance. Less stress, better choices." name="The Garcias" title="Family of 4" />
+            <Testimonial
+              quote="PowerMoves turned my finances from a fog into a flight plan."
+              name="Ava M."
+              title="Product Designer"
+            />
+            <Testimonial
+              quote="It’s the first money app that feels both serious and simple."
+              name="Noah T."
+              title="Indie Dev"
+            />
+            <Testimonial
+              quote="We finally see our month at a glance. Less stress, better choices."
+              name="The Garcias"
+              title="Family of 4"
+            />
           </div>
         </div>
       </Section>
@@ -536,11 +686,23 @@ export default function LandingPage() {
       <Section id="faq" className="bg-white/[0.02] ring-1 ring-white/5">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <HeaderEyebrow title="FAQ" subtitle="You ask. We answer." />
-          <div className="mt-8 grid md:grid-cols-2 gap-6">
-            <Faq q="Is my data secure?" a="Yes. We use bank-grade connections via Plaid, encrypt sensitive tokens at rest, and follow the principle of least privilege throughout the stack." />
-            <Faq q="Can I track manual accounts?" a="Absolutely. Create manual accounts for cash, property, or any asset, then filter globally—manual and Plaid sources live side-by-side." />
-            <Faq q="How fast is it?" a="Very. Client-side state and memoized queries keep interactions snappy. You’ll feel the difference immediately." />
-            <Faq q="What does the Pro plan add?" a="Plaid syncing, power filters, CSV exports, and priority support—everything heavy users need." />
+        <div className="mt-8 grid md:grid-cols-2 gap-6">
+            <Faq
+              q="Is my data secure?"
+              a="Yes. We use bank-grade connections via Plaid, encrypt sensitive tokens at rest, and follow the principle of least privilege throughout the stack."
+            />
+            <Faq
+              q="Can I track manual accounts?"
+              a="Absolutely. Create manual accounts for cash, property, or any asset, then filter globally—manual and Plaid sources live side-by-side."
+            />
+            <Faq
+              q="How fast is it?"
+              a="Very. Client-side state and memoized queries keep interactions snappy. You’ll feel the difference immediately."
+            />
+            <Faq
+              q="What does the Pro plan add?"
+              a="Plaid syncing, power filters, CSV exports, and priority support—everything heavy users need."
+            />
           </div>
         </div>
       </Section>
@@ -676,15 +838,43 @@ function FeatureCard({
 function ImageCard({ src, caption }: { src: string; caption: string }) {
   return (
     <figure
-      className="rounded-2xl overflow-hidden ring-1 ring-white/10 bg-white/5"
+      className="
+        group relative overflow-hidden rounded-2xl 
+        ring-1 ring-white/10 bg-white/5 shadow-xl
+        transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl
+      "
       data-reveal
-      style={{ height: "16rem", willChange: "transform, opacity" }}
+      style={{ height: "18rem", willChange: "transform, opacity" }}
     >
-      <img src={src} alt="" className="w-full h-full object-cover" />
-      <figcaption className="p-3 text-xs text-white/70">{caption}</figcaption>
+      {/* image */}
+      <img
+        src={src}
+        alt=""
+        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+      />
+
+      {/* subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent opacity-60 group-hover:opacity-70 transition" />
+
+      {/* caption overlay */}
+      <figcaption
+        className="
+          absolute bottom-0 inset-x-0 p-4 
+          text-sm text-white/80 backdrop-blur-sm 
+          bg-gradient-to-t from-slate-900/70 via-slate-900/30 to-transparent
+          translate-y-6 opacity-0 group-hover:translate-y-0 group-hover:opacity-100
+          transition-all duration-500
+        "
+      >
+        {caption}
+      </figcaption>
+
+      {/* neon-ish glow ring on hover */}
+      <div className="absolute inset-0 rounded-2xl ring-2 ring-emerald-400/0 group-hover:ring-emerald-400/40 transition duration-500" />
     </figure>
   );
 }
+
 
 function StoryStep({ step, title, text }: { step: string; title: string; text: string }) {
   return (
@@ -775,7 +965,9 @@ function Testimonial({
       style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
     >
       <p className="text-sm leading-relaxed">“{quote}”</p>
-      <footer className="mt-3 text-xs text-white/60">— {name}, {title}</footer>
+      <footer className="mt-3 text-xs text-white/60">
+        — {name}, {title}
+      </footer>
     </blockquote>
   );
 }
@@ -784,7 +976,10 @@ function Faq({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = React.useState(false);
   return (
     <div className="rounded-xl bg-white/5 ring-1 ring-white/10" data-reveal>
-      <button className="w-full text-left px-4 py-3 flex items-center justify-between" onClick={() => setOpen((v) => !v)}>
+      <button
+        className="w-full text-left px-4 py-3 flex items-center justify-between"
+        onClick={() => setOpen((v) => !v)}
+      >
         <span className="text-sm">{q}</span>
         <span className="text-xs text-white/60">{open ? "–" : "+"}</span>
       </button>

@@ -1,4 +1,3 @@
-// src/features/widgets/widgetsSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export type WidgetType =
@@ -16,8 +15,9 @@ export type WidgetType =
   | "stocks-portfolio"
   | "advice"
   | "goals"
+  | "category-pie"
   // 👇 NEW
-  | "category-pie";
+  | "upcoming-bills";
 
 export type WidgetSize = "sm" | "lg";
 
@@ -52,8 +52,10 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w12: { id: "w12", type: "stocks-portfolio",     title: "Stocks & ETFs",       size: "sm" },
   w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" },
   w14: { id: "w14", type: "goals",                title: "Goals",               size: "sm" },
-  // 👇 NEW default
   w15: { id: "w15", type: "category-pie",         title: "Category Summary",    size: "sm" },
+
+  // 👇 NEW default
+  w16: { id: "w16", type: "upcoming-bills",       title: "Upcoming Bills",      size: "sm" },
 };
 
 export const DEFAULT_ORDER = [
@@ -61,8 +63,9 @@ export const DEFAULT_ORDER = [
   "w8",
   "w14",
   "w5","w7",
-  // 👇 place category pie near spending
   "w15",
+  // 👇 place near spending widgets
+  "w16",
   "w9","w12",
   "w10","w11",
   "w13",

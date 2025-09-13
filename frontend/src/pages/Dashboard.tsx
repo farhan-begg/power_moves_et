@@ -1,3 +1,4 @@
+// src/pages/Dashboard.tsx
 import React from "react";
 import {
   DndContext,
@@ -14,17 +15,24 @@ import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import SortableWidget from "../components/widgets/SortableWidget";
 import { widgetRenderer } from "../components/widgets/registry";
 import { useAppDispatch, useAppSelector } from "../hooks/hooks";
-import { reorder, removeWidget, ensureDefaults } from "../features/widgets/widgetsSlice";
+import {
+  reorder,
+  removeWidget,
+  ensureDefaults,
+} from "../features/widgets/widgetsSlice";
 import GlobalAccountFilter from "../components/filters/GlobalAccountFilter";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { syncPlaidTransactions } from "../api/plaid";
+import LogoLoader from "../components/common/LogoLoader";
 
-// ⬇️ Heroicons
+// Heroicons
 import {
   ArrowPathIcon,
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
+
+const INITIAL_SYNC_KEY = "pm_initial_sync_done";
 
 export default function Dashboard() {
   const dispatch = useAppDispatch();
@@ -35,6 +43,14 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
 
   const [activeId, setActiveId] = React.useState<string | null>(null);
+
+  // overlay shown ONLY during first-time initial sync after login
+  const [showInitialLoader, setShowInitialLoader] = React.useState<boolean>(() => {
+    const done = typeof window !== "undefined" && localStorage.getItem(INITIAL_SYNC_KEY) === "1";
+    return !done; // show if not done yet
+  });
+
+  // keep a separate flag for the manual refresh button spinner (doesn't show overlay)
   const [isSyncing, setIsSyncing] = React.useState(false);
 
   const sensors = useSensors(
@@ -45,29 +61,50 @@ export default function Dashboard() {
     dispatch(ensureDefaults());
   }, [dispatch]);
 
+  // Helper: run the initial sync with overlay, then mark done
+  const runInitialSync = React.useCallback(async () => {
+    if (!token) return;
+    setShowInitialLoader(true);
+    try {
+      await syncPlaidTransactions(token);
+      // invalidate core queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["transactions", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
+      ]);
+    } catch (e) {
+      console.error("❌ initial sync failed:", e);
+      // Even on failure, don't trap user behind a loader; let widgets handle their own retries.
+    } finally {
+      localStorage.setItem(INITIAL_SYNC_KEY, "1");
+      setShowInitialLoader(false);
+    }
+  }, [token, queryClient]);
+
+  // 🔄 On first load after login: run the initial sync ONCE
   React.useEffect(() => {
     if (!token) return;
-    let cancelled = false;
+    const alreadyDone = localStorage.getItem(INITIAL_SYNC_KEY) === "1";
+    if (!alreadyDone) {
+      runInitialSync();
+    }
+  }, [token, runInitialSync]);
 
-    (async () => {
-      try {
-        setIsSyncing(true);
-        await syncPlaidTransactions(token);
-        if (cancelled) return;
-        queryClient.invalidateQueries({ queryKey: ["transactions", "list"] });
-        queryClient.invalidateQueries({ queryKey: ["accounts"] });
-        queryClient.invalidateQueries({ queryKey: ["plaid", "net-worth"] });
-      } catch (e) {
-        console.error("❌ syncPlaidTransactions failed:", e);
-      } finally {
-        if (!cancelled) setIsSyncing(false);
+  // 🔔 If Plaid is just linked for the first time, treat it as initial sync (if not done yet)
+  React.useEffect(() => {
+    const onLinked = async () => {
+      const alreadyDone = localStorage.getItem(INITIAL_SYNC_KEY) === "1";
+      if (!alreadyDone) {
+        await runInitialSync();
+      } else {
+        // if initial sync already done, do a light background refresh without overlay
+        await handleManualRefresh();
       }
-    })();
-
-    return () => {
-      cancelled = true;
     };
-  }, [token, queryClient]);
+    window.addEventListener("plaid:linked", onLinked);
+    return () => window.removeEventListener("plaid:linked", onLinked);
+  }, [runInitialSync]);
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
   const onDragEnd = (e: DragEndEvent) => {
@@ -79,14 +116,17 @@ export default function Dashboard() {
     setActiveId(null);
   };
 
+  // Manual refresh (no full-screen overlay, just spins the icon)
   const handleManualRefresh = async () => {
     if (!token || isSyncing) return;
     try {
       setIsSyncing(true);
       await syncPlaidTransactions(token);
-      queryClient.invalidateQueries({ queryKey: ["transactions", "list"] });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["plaid", "net-worth"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["transactions", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
+      ]);
     } catch (e) {
       console.error("❌ Manual sync failed:", e);
     } finally {
@@ -96,7 +136,23 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem(INITIAL_SYNC_KEY); // reset so next login shows initial loader again
     window.location.reload();
+  };
+
+  // Grid span rules
+  const spanFor = (w: { type: string; size: "sm" | "lg" }) => {
+    const defaultSm = w.size === "lg" ? "sm:col-span-6" : "sm:col-span-3";
+    const defaultXl = w.size === "lg" ? "xl:col-span-8" : "xl:col-span-4";
+
+    const byTypeSm: Record<string, string | undefined> = {
+      "income-expense-chart": "sm:col-span-6",
+    };
+    const byTypeXl: Record<string, string | undefined> = {
+      "income-expense-chart": "xl:col-span-8",
+    };
+
+    return `${byTypeSm[w.type] ?? defaultSm} ${byTypeXl[w.type] ?? defaultXl}`;
   };
 
   const Overlay = () => {
@@ -118,7 +174,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-white">
+    <div className="relative min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-white">
+      {/* 🔵 Full-screen loader ONLY for the very first sync after login */}
+      {showInitialLoader && <LogoLoader  />}
+
       <h1 className="text-2xl font-semibold mb-4">Your Dashboard</h1>
 
       {/* Overview + Filter + Buttons */}
@@ -128,7 +187,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <GlobalAccountFilter />
 
-          {/* Sync button */}
+          {/* Sync button (icon spins but no full overlay) */}
           <button
             onClick={handleManualRefresh}
             disabled={!token || isSyncing}
@@ -136,7 +195,9 @@ export default function Dashboard() {
             title="Sync latest transactions"
           >
             <ArrowPathIcon
-              className={`w-5 h-5 ${isSyncing ? "animate-spin text-blue-400" : "text-white"}`}
+              className={`w-5 h-5 ${
+                isSyncing ? "animate-spin text-blue-400" : "text-white"
+              }`}
             />
           </button>
 
@@ -159,9 +220,12 @@ export default function Dashboard() {
         collisionDetection={closestCenter}
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       >
-        <SortableContext items={order.map(String)} strategy={rectSortingStrategy}>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {order.map((id: string) => {
+        <SortableContext
+          items={order.map(String)}
+          strategy={rectSortingStrategy}
+        >
+          <div className="grid gap-3 sm:gap-4 xl:gap-5 grid-cols-1 sm:grid-cols-6 xl:grid-cols-12">
+            {order.map((id) => {
               const w = byId[id];
               if (!w) return null;
               const Comp = widgetRenderer[w.type];
@@ -172,6 +236,7 @@ export default function Dashboard() {
                   key={id}
                   id={id}
                   title={w.title}
+                  className={spanFor(w)}
                   onRemove={() => dispatch(removeWidget(id))}
                 >
                   <Comp />
@@ -181,7 +246,10 @@ export default function Dashboard() {
           </div>
         </SortableContext>
 
-        <DragOverlay adjustScale={false} dropAnimation={{ duration: 180, easing: "ease-out" }}>
+        <DragOverlay
+          adjustScale={false}
+          dropAnimation={{ duration: 180, easing: "ease-out" }}
+        >
           <Overlay />
         </DragOverlay>
       </DndContext>

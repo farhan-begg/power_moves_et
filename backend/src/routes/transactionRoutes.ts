@@ -200,7 +200,6 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: "Error saving transaction", details: err?.message || err });
   }
 });
-
 router.get("/", protect, async (req: AuthRequest, res: Response) => {
   try {
     const {
@@ -215,59 +214,73 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
       category?: string;
       source?: "manual" | "plaid";
       startDate?: string;
-      endDate?: string;
+      endDate?: string;           // EXCLUSIVE (UI sends endExclusiveISO)
       minAmount?: string;
       maxAmount?: string;
       sortBy?: string;
       order?: "asc" | "desc";
       page?: string;
       limit?: string;
-      accountId?: string;
-      accountIds?: string;
+      accountId?: string;         // may be "__all__", "all", "", etc.
+      accountIds?: string;        // CSV
     };
-
-    console.log("GET /api/transactions query:", req.query);
 
     const userId = new mongoose.Types.ObjectId(String(req.user));
     const filter: Record<string, any> = { userId };
 
+    // ---------- basic filters ----------
     if (type) filter.type = type;
     if (category) filter.category = category;
     if (source) filter.source = source;
-    if (minAmount) filter.amount = { ...filter.amount, $gte: Number(minAmount) };
-    if (maxAmount) filter.amount = { ...filter.amount, $lte: Number(maxAmount) };
 
+    // numeric range (guard against NaN)
+    const min = minAmount != null ? Number(minAmount) : undefined;
+    const max = maxAmount != null ? Number(maxAmount) : undefined;
+    if (Number.isFinite(min)) filter.amount = { ...(filter.amount || {}), $gte: min };
+    if (Number.isFinite(max)) filter.amount = { ...(filter.amount || {}), $lte: max };
+
+    // dates (endDate EXCLUSIVE)
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(String(startDate));
-      if (endDate)  filter.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
+      if (endDate)  filter.date.$lt  = new Date(String(endDate)); // ✅ exclusive
     }
 
+    // ---------- account scoping ----------
+    // parseAccountIds ignores "__all__", "all", "undefined", "null", "" ✅
     const ids = parseAccountIds({ accountId, accountIds });
     if (ids.length === 1) {
+      // support both normalized and legacy field
       filter.$or = [{ accountId: ids[0] }, { account_id: ids[0] }];
     } else if (ids.length > 1) {
       filter.$or = [{ accountId: { $in: ids } }, { account_id: { $in: ids } }];
     }
 
+    // ---------- sorting & paging ----------
     const sortField = (sortBy as string) || "date";
     const sortOrder = order === "asc" ? 1 : -1;
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 10;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 10)); // ✅ sane bounds
     const skip = (pageNum - 1) * limitNum;
 
+    // Helpful debug logs (keep in dev)
+    console.log("GET /api/transactions raw query:", req.query);
     console.log("GET /api/transactions Mongo filter:", JSON.stringify(filter));
 
-    const total = await Transaction.countDocuments(filter);
-    const transactions = await Transaction.find(filter)
-      .sort({ [sortField]: sortOrder })
-      .skip(skip)
-      .limit(limitNum);
+    // ---------- query ----------
+    const [total, transactions] = await Promise.all([
+      Transaction.countDocuments(filter),
+      Transaction.find(filter)
+        .sort({ [sortField]: sortOrder })
+        .skip(skip)
+        .limit(limitNum)
+        .lean() // ✅ faster reads
+    ]);
 
     res.json({
       total,
       page: pageNum,
-      pages: Math.ceil(total / limitNum),
+      pages: Math.max(1, Math.ceil(total / limitNum)),
       transactions,
     });
   } catch (err: any) {

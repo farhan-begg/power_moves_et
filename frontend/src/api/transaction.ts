@@ -22,9 +22,18 @@ export interface Transaction {
   description?: string;
   source: SourceType;
 
-  // account-scoping
+  // Account scoping
   accountId?: string;
   accountName?: string;
+
+  // Plaid original id (optional; present when source === 'plaid' or when we link by plaidTxId)
+  plaidTxId?: string | null;
+
+  // Recurring links (optional; set by detector or manual "match" flows)
+  matchedRecurringId?: string | null;
+  matchedBillId?: string | null;
+  matchedPaycheckId?: string | null;
+  matchConfidence?: number | null;
 
   createdAt: string;
   updatedAt: string;
@@ -92,6 +101,8 @@ export const fetchTransactions = async (
   const qs = new URLSearchParams(entries).toString();
   const url = qs ? `/api/transactions?${qs}` : "/api/transactions";
 
+  // helpful when debugging filters in dev
+  // eslint-disable-next-line no-console
   console.log("%c[HTTP] GET " + url, "color:#34d399;font-weight:bold");
 
   const { data } = await http.get<PagedTransactionsResponse>(url, auth(token));
@@ -124,6 +135,9 @@ export const addTransaction = async (
     /** Optional account scoping */
     accountId?: string;
     accountName?: string;
+
+    /** Optional plaid id if you want to associate a manual row with a Plaid-origin id */
+    plaidTxId?: string | null;
   }
 ) => {
   const res = await http.post<Transaction>("/api/transactions", data, auth(token));
@@ -157,11 +171,20 @@ export const updateTransaction = async (
     // convenience for creating/selecting manual account by name
     manualAccountName: string;
     manualAccountCurrency: string;
+
+    // (rare) allow patching plaidTxId if you need to
+    plaidTxId: string | null;
+
+    // recurring links are typically set by backend; included for completeness
+    matchedRecurringId: string | null;
+    matchedBillId: string | null;
+    matchedPaycheckId: string | null;
+    matchConfidence: number | null;
   }>
 ) => {
-  const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
-  return res.data;
-};
+    const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
+    return res.data;
+  };
 
 export const deleteTransaction = async (token: string, id: string) => {
   const res = await http.delete<{ message: string; id: string }>(
@@ -202,7 +225,6 @@ export const fetchSummary = async (
   });
   return data;
 };
-
 
 export const bulkCategorize = async (
   token: string,

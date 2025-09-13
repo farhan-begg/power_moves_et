@@ -27,3 +27,28 @@
 }
 
 html { scroll-behavior: smooth; }
+
+/* Neon-ish, tasteful glow for the logo */
+.drop-shadow-neon {
+  filter:
+    drop-shadow(0 0 18px rgba(56, 189, 248, 0.35))  /* cyan-400 */
+    drop-shadow(0 0 28px rgba(217, 70, 239, 0.25)); /* fuchsia-500 */
+}
+
+/* Gentle breathing effect */
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50%      { transform: scale(1.03); opacity: 1;    }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 1600ms ease-in-out infinite;
+}
+
+/* Professional indeterminate bar (slides left→right repeatedly) */
+@keyframes indeterminate-bar {
+  0%   { transform: translateX(-50%); }
+  100% { transform: translateX(150%); }
+}
+.animate-indeterminate-bar {
+  animation: indeterminate-bar 1400ms ease-in-out infinite;
+}

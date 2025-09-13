@@ -2,38 +2,23 @@
 import React from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
-import {
-  useQuery,
-  keepPreviousData,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
-import {
-  fetchTransactions,
-  bulkCategorize,
-  Transaction,
-  PagedTransactionsResponse,
-} from "../../api/transaction";
+import { bulkCategorize } from "../../api/transaction";
+import { listCategories, type Category } from "../../api/categories";
+import { selectSelectedAccountId } from "../../app/selectors";
+
 import {
   ArrowDownRightIcon,
   ArrowUpRightIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
-import {
-  formatUTC_MMDDYYYY,
-  localYMD,
-  toIsoStartEndExclusive,
-} from "../../helpers/date";
-import { listCategories, type Category } from "../../api/categories";
-import {
-  CategoryIcon,
-  DEFAULT_COLORS,
-  hexToRgba,
-} from "../icons/CategoryIcons";
+import { formatUTC_MMDDYYYY, localYMD, toIsoStartEndExclusive } from "../../helpers/date";
+import { CategoryIcon, DEFAULT_COLORS, hexToRgba } from "../icons/CategoryIcons";
 import FilterPill from "../common/FilterPill";
+import { useRecentTransactions, type TxnFilter } from "../../hooks/transactionsHooks";
 
-type Filter = "all" | "expense" | "income";
 type Preset = "7d" | "30d" | "90d" | "ytd" | "1y" | "custom";
 
 type PlaidAccount = {
@@ -80,16 +65,15 @@ export default function TransactionsListWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
   const qc = useQueryClient();
 
-  const selectedAccountIdRaw = useSelector(
-    (s: RootState) => s.accountFilter.selectedAccountId
-  );
+  // accept account selection from any of your possible slices
+
+  const selectedAccountIdRaw = useSelector(selectSelectedAccountId);
   const accountFilterId = React.useMemo(
-    () =>
-      isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined,
+    () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
     [selectedAccountIdRaw]
   );
 
-  const [filter, setFilter] = React.useState<Filter>("all");
+  const [filter, setFilter] = React.useState<TxnFilter>("all");
   const [preset, setPreset] = React.useState<Preset>("30d");
 
   const init = React.useMemo(() => localRangeForPreset("30d"), []);
@@ -103,14 +87,11 @@ export default function TransactionsListWidget() {
   const [page, setPage] = React.useState(1);
   const limit = 6;
 
-  // Selection state: highlight rows by click / dblclick to categorize
+  // selection state
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
-  const selectedIds = React.useMemo(
-    () => Object.keys(selected).filter((k) => selected[k]),
-    [selected]
-  );
+  const selectedIds = React.useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
 
-  // Distinguish click vs double-click
+  // click vs dblclick
   const clickTimer = React.useRef<number | null>(null);
   const dblGuard = React.useRef(false);
 
@@ -129,10 +110,8 @@ export default function TransactionsListWidget() {
     setDateError(null);
   }, [preset]);
 
-  // Accounts
-  const { data: accountsRaw } = useQuery<
-    PlaidAccount[] | { accounts: PlaidAccount[] }
-  >({
+  // accounts (for display names/masks)
+  const { data: accountsRaw } = useQuery<PlaidAccount[] | { accounts: PlaidAccount[] }>({
     queryKey: ["accounts"],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
@@ -142,7 +121,7 @@ export default function TransactionsListWidget() {
     gcTime: 30 * 60 * 1000,
   });
 
-  // Categories (for color tint)
+  // categories (for color tint)
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: () => listCategories(token!),
@@ -150,14 +129,12 @@ export default function TransactionsListWidget() {
     staleTime: 60 * 1000,
   });
 
-  // case-insensitive map of categories by name
   const catByName = React.useMemo(() => {
     const m = new Map<string, Category>();
     (categories ?? []).forEach((c) => m.set(norm(c.name), c));
     return m;
   }, [categories]);
 
-  // keyword fallback palette when DB color is missing
   const keywordColorFallback = (name: string) => {
     const n = norm(name);
     for (const key of Object.keys(DEFAULT_COLORS)) {
@@ -176,61 +153,37 @@ export default function TransactionsListWidget() {
   const accounts = React.useMemo<PlaidAccount[]>(() => {
     const raw = accountsRaw as unknown;
     if (Array.isArray(raw)) return raw;
-    if (
-      raw &&
-      typeof raw === "object" &&
-      Array.isArray((raw as any).accounts)
-    ) {
+    if (raw && typeof raw === "object" && Array.isArray((raw as any).accounts)) {
       return (raw as any).accounts as PlaidAccount[];
     }
     return [];
   }, [accountsRaw]);
 
   const accountIdParam = accountFilterId;
+  const selectedAccountId = useSelector(selectSelectedAccountId);
 
   const { startISO, endExclusiveISO } = React.useMemo(() => {
-    if (!startDate || !endDate) {
+    if (!startDate || !endDate)
       return { startISO: undefined, endExclusiveISO: undefined } as {
         startISO?: string;
         endExclusiveISO?: string;
       };
-    }
     return toIsoStartEndExclusive(startDate, endDate);
   }, [startDate, endDate]);
 
-  const {
-    data: txRes,
-    isError,
-    isFetching,
-  } = useQuery<PagedTransactionsResponse>({
-    queryKey: [
-      "transactions",
-      "list",
-      filter,
-      startISO,
-      endExclusiveISO,
-      page,
-      limit,
-      accountIdParam ?? "ALL",
-    ],
-    queryFn: () =>
-      fetchTransactions(token!, {
-        type: filter === "all" ? undefined : filter,
-        startDate: startISO,
-        endDate: endExclusiveISO,
-        page,
-        limit,
-        sortBy: "date",
-        order: "desc",
-        accountId: accountIdParam,
-      }),
-    enabled: !!token && !!(startISO && endExclusiveISO),
-    placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
-    gcTime: 10 * 60 * 1000,
+  // ✅ shared hook keeps this in sync with other widgets
+  const { data: txRes, isError, isFetching } = useRecentTransactions({
+    filter,
+    startDate: startISO,
+    endDate: endExclusiveISO,
+    page,
+    limit,
+    sortBy: "date",
+    order: "desc",
+    accountId: selectedAccountId,
   });
 
-  const transactions: Transaction[] = txRes?.transactions ?? [];
+  const transactions = txRes?.transactions ?? [];
   const total = txRes?.total ?? 0;
   const pages = txRes?.pages ?? 1;
 
@@ -282,9 +235,8 @@ export default function TransactionsListWidget() {
     setDateError(null);
   };
 
-  // -------- Selection & categorize handlers (no checkboxes) --------
-  const toggleRow = (id: string) =>
-    setSelected((m) => ({ ...m, [id]: !m[id] }));
+  // selection & categorize
+  const toggleRow = (id: string) => setSelected((m) => ({ ...m, [id]: !m[id] }));
   const clearSelection = () => setSelected({});
 
   const doCategorize = async (ids: string[]) => {
@@ -293,39 +245,80 @@ export default function TransactionsListWidget() {
     if (!name || !name.trim()) return;
     await bulkCategorize(token!, { ids, categoryName: name.trim() });
     clearSelection();
-    qc.invalidateQueries({ queryKey: ["transactions", "list"] });
-    qc.invalidateQueries({ queryKey: ["stats"] });
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
   };
 
+  const clickTimerRef = clickTimer; // alias to satisfy TS in handlers
   const handleClick = (id: string) => {
-    if (clickTimer.current) window.clearTimeout(clickTimer.current);
-    clickTimer.current = window.setTimeout(() => {
+    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = window.setTimeout(() => {
       if (!dblGuard.current) toggleRow(id);
       dblGuard.current = false;
-      clickTimer.current = null;
+      clickTimerRef.current = null;
     }, 180);
   };
 
   const handleDoubleClick = (id: string) => {
-    if (clickTimer.current) window.clearTimeout(clickTimer.current);
+    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
     dblGuard.current = true;
     const ids = selectedIds.length > 0 ? selectedIds : [id];
     void doCategorize(ids);
   };
 
+  // small recurring chips
+  const RecurringChips: React.FC<{
+    matchedBillId?: string | null;
+    matchedPaycheckId?: string | null;
+    matchConfidence?: number | null;
+  }> = ({ matchedBillId, matchedPaycheckId, matchConfidence }) => {
+    const chips: React.ReactNode[] = [];
+    if (matchedBillId) {
+      chips.push(
+        <span
+          key="bill"
+          title="Linked to a bill"
+          className="px-1.5 py-0.5 rounded-full bg-amber-400/10 text-amber-200 ring-1 ring-amber-400/20 text-[10px] uppercase tracking-wide"
+        >
+          Bill
+        </span>
+      );
+    }
+    if (matchedPaycheckId) {
+      chips.push(
+        <span
+          key="pay"
+          title="Linked to a paycheck"
+          className="px-1.5 py-0.5 rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/20 text-[10px] uppercase tracking-wide"
+        >
+          Paycheck
+        </span>
+      );
+    }
+    if (matchConfidence != null && matchConfidence < 1 && (matchedBillId || matchedPaycheckId)) {
+      chips.push(
+        <span
+          key="conf"
+          title={`Confidence ${Math.round(matchConfidence * 100)}%`}
+          className="px-1.5 py-0.5 rounded-full bg-white/5 text-white/60 ring-1 ring-white/10 text-[10px]"
+        >
+          ~{Math.round(matchConfidence * 100)}%
+        </span>
+      );
+    }
+    if (chips.length === 0) return null;
+    return <div className="flex items-center gap-1">{chips}</div>;
+  };
+
   return (
     <div className={glass}>
-      {/* Hint / selection bar */}
+      {/* selection bar */}
       {selectedIds.length > 0 && (
         <div className="sticky top-0 z-10 mb-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white backdrop-blur-md ring-1 ring-white/10">
           <div className="flex items-center justify-between">
             <div>
-              <span className="font-medium">{selectedIds.length}</span> selected
-              —{" "}
-              <span className="text-white/70">
-                double-click any selected row to set a category
-              </span>
+              <span className="font-medium">{selectedIds.length}</span> selected —{" "}
+              <span className="text-white/70">double-click any selected row to set a category</span>
             </div>
             <button
               onClick={clearSelection}
@@ -337,7 +330,7 @@ export default function TransactionsListWidget() {
         </div>
       )}
 
-      {/* Header + controls */}
+      {/* header + controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
@@ -346,10 +339,7 @@ export default function TransactionsListWidget() {
           </div>
           {accountIdParam ? (
             <div className="mt-1 text-[11px] text-white/60">
-              Account:{" "}
-              <span className="text-white">
-                {accMap.get(accountIdParam) || "Selected account"}
-              </span>
+              Account: <span className="text-white">{accMap.get(accountIdParam) || "Selected account"}</span>
             </div>
           ) : (
             <div className="mt-1 text-[11px] text-white/40">All accounts</div>
@@ -358,29 +348,14 @@ export default function TransactionsListWidget() {
 
         <div className="flex items-center gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <FilterPill
-              label="All"
-              value="all"
-              active={filter === "all"}
-              onClick={setFilter}
-            />
-            <FilterPill
-              label="Spending"
-              value="expense"
-              active={filter === "expense"}
-              onClick={setFilter}
-            />
-            <FilterPill
-              label="Income"
-              value="income"
-              active={filter === "income"}
-              onClick={setFilter}
-            />
+            <FilterPill label="All" value="all" active={filter === "all"} onClick={setFilter} />
+            <FilterPill label="Spending" value="expense" active={filter === "expense"} onClick={setFilter} />
+            <FilterPill label="Income" value="income" active={filter === "income"} onClick={setFilter} />
           </div>
         </div>
       </div>
 
-      {/* Date presets + custom range */}
+      {/* presets + custom range */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {(["7d", "30d", "90d", "ytd", "1y", "custom"] as Preset[]).map((p) => (
           <button
@@ -428,19 +403,15 @@ export default function TransactionsListWidget() {
               Reset
             </button>
 
-            {dateError && (
-              <span className="text-[11px] text-rose-300 ml-2">
-                {dateError}
-              </span>
-            )}
+            {dateError && <span className="text-[11px] text-rose-300 ml-2">{dateError}</span>}
           </div>
         )}
       </div>
 
-      {/* Error */}
+      {/* error */}
       {isError && <p className="text-rose-300">Failed to load transactions.</p>}
 
-      {/* Empty */}
+      {/* empty */}
       {!isError && transactions.length === 0 && (
         <div className="text-white/70">
           No results for <b>{filter === "all" ? "all types" : filter}</b>
@@ -454,13 +425,10 @@ export default function TransactionsListWidget() {
         </div>
       )}
 
-      {/* Results */}
+      {/* results */}
       {!isError && transactions.length > 0 && (
         <>
-          <ul
-            className="divide-y divide-white/10 transition-opacity duration-150"
-            style={{ opacity: isFetching ? 0.85 : 1 }}
-          >
+          <ul className="divide-y divide-white/10 transition-opacity duration-150" style={{ opacity: isFetching ? 0.85 : 1 }}>
             {transactions.map((t) => {
               const bank = bankNameFor(t);
               const isExpense = t.type === "expense";
@@ -469,10 +437,7 @@ export default function TransactionsListWidget() {
 
               const catColor = colorForCategory(t.category);
               const badgeStyles: React.CSSProperties | undefined = catColor
-                ? {
-                    border: `1px solid ${catColor}`,
-                    backgroundColor: hexToRgba(catColor, 0.14),
-                  }
+                ? { border: `1px solid ${catColor}`, backgroundColor: hexToRgba(catColor, 0.14) }
                 : { border: "1px solid rgba(255,255,255,0.15)" };
 
               const isSelected = !!selected[t._id];
@@ -484,9 +449,7 @@ export default function TransactionsListWidget() {
                   onDoubleClick={() => handleDoubleClick(t._id)}
                   className={[
                     "py-3 flex items-center gap-4 cursor-pointer select-none rounded-lg",
-                    isSelected
-                      ? "bg-white/10 ring-1 ring-white/20 shadow-inner"
-                      : "hover:bg-white/5",
+                    isSelected ? "bg-white/10 ring-1 ring-white/20 shadow-inner" : "hover:bg-white/5",
                   ].join(" ")}
                 >
                   <div className="shrink-0">
@@ -496,7 +459,7 @@ export default function TransactionsListWidget() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3">
                       <div className="min-w-0 flex items-center gap-2">
-                        {/* Category icon badge (Heroicons) */}
+                        {/* category icon */}
                         <span
                           title={t.category || "Uncategorized"}
                           className="inline-flex h-6 w-6 items-center justify-center rounded-full"
@@ -506,7 +469,7 @@ export default function TransactionsListWidget() {
                             category={t.category || "Uncategorized"}
                             description={t.description}
                             className="h-4 w-4"
-                            color={catColor} // ← directly tints the SVG (outline uses currentColor)
+                            color={catColor}
                           />
                         </span>
 
@@ -515,11 +478,7 @@ export default function TransactionsListWidget() {
                         </div>
                       </div>
 
-                      <div
-                        className={`shrink-0 font-mono tabular-nums ${
-                          isExpense ? "text-rose-300" : "text-emerald-300"
-                        }`}
-                      >
+                      <div className={`shrink-0 font-mono tabular-nums ${isExpense ? "text-rose-300" : "text-emerald-300"}`}>
                         {amountText}
                       </div>
                     </div>
@@ -538,6 +497,13 @@ export default function TransactionsListWidget() {
                       </span>
                       <span className="text-white/30">•</span>
                       <span>{formatUTC_MMDDYYYY(t.date)}</span>
+
+                      {/* recurring chips */}
+                      <RecurringChips
+                        matchedBillId={t.matchedBillId}
+                        matchedPaycheckId={t.matchedPaycheckId}
+                        matchConfidence={t.matchConfidence}
+                      />
                     </div>
                   </div>
 
@@ -549,11 +515,10 @@ export default function TransactionsListWidget() {
             })}
           </ul>
 
-          {/* Pagination */}
+          {/* pagination */}
           <div className="mt-4 flex items-center justify-between">
             <div className="text-xs text-white/60">
-              Showing <span className="text-white">{from}</span>–
-              <span className="text-white">{to}</span> of{" "}
+              Showing <span className="text-white">{from}</span>–<span className="text-white">{to}</span> of{" "}
               <span className="text-white">{total}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -566,8 +531,7 @@ export default function TransactionsListWidget() {
                 Prev
               </button>
               <div className="text-xs text-white/70">
-                Page <span className="text-white">{page}</span> /{" "}
-                <span className="text-white">{pages}</span>
+                Page <span className="text-white">{page}</span> / <span className="text-white">{pages}</span>
               </div>
               <button
                 onClick={() => setPage((p) => Math.min(pages, p + 1))}
