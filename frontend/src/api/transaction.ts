@@ -88,23 +88,60 @@ export interface SummaryResponse {
   data: SummaryPoint[];
 }
 
+/* ---------- Insights types ---------- */
+export type InsightsRangeParams = {
+  /** UTC ISO inclusive */
+  startDate?: string;
+  /** UTC ISO exclusive */
+  endDate?: string;
+  accountId?: string;
+  accountIds?: string; // CSV
+};
+
+export interface TopCategoryRow {
+  category: string;
+  spend: number; // absolute summed spend
+  count: number;
+}
+export interface TopMerchantRow {
+  merchant: string;
+  spend: number; // absolute summed spend
+  count: number;
+}
+export interface LargestExpenseRow {
+  date: string;      // ISO
+  amount: number;    // absolute (largest by magnitude)
+  merchant: string;
+  category: string;
+}
+export interface BurnRateResponse {
+  avgDaily: number;
+  projectedMonthly: number;
+  daysCounted: number;
+  total: number;
+}
+
+/** ------------------ Helpers ------------------ */
+
+const buildQueryString = (params: Record<string, unknown>) => {
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== null && v !== ""
+  ) as [string, string][];
+  return new URLSearchParams(entries).toString();
+};
+
+const logGet = (url: string) =>
+  console.log("%c[HTTP] GET " + url, "color:#34d399;font-weight:bold");
+
 /** ------------------ Endpoints ------------------ */
 
 export const fetchTransactions = async (
   token: string,
   params: TransactionsQuery = {}
 ): Promise<PagedTransactionsResponse> => {
-  const entries = Object.entries(params).filter(
-    ([, v]) => v !== undefined && v !== null && v !== ""
-  ) as [string, string][];
-
-  const qs = new URLSearchParams(entries).toString();
+  const qs = buildQueryString(params);
   const url = qs ? `/api/transactions?${qs}` : "/api/transactions";
-
-  // helpful when debugging filters in dev
-  // eslint-disable-next-line no-console
-  console.log("%c[HTTP] GET " + url, "color:#34d399;font-weight:bold");
-
+  logGet(url);
   const { data } = await http.get<PagedTransactionsResponse>(url, auth(token));
   return data;
 };
@@ -182,9 +219,9 @@ export const updateTransaction = async (
     matchConfidence: number | null;
   }>
 ) => {
-    const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
-    return res.data;
-  };
+  const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
+  return res.data;
+};
 
 export const deleteTransaction = async (token: string, id: string) => {
   const res = await http.delete<{ message: string; id: string }>(
@@ -231,5 +268,59 @@ export const bulkCategorize = async (
   payload: { ids: string[]; categoryId?: string; categoryName?: string }
 ): Promise<{ ok: boolean; matched: number; modified: number }> => {
   const { data } = await http.post("/api/transactions/bulk-categorize", payload, auth(token));
+  return data;
+};
+
+/** ------------------ Insights endpoints ------------------ */
+
+// Top categories (expenses)
+export const fetchTopCategories = async (
+  token: string,
+  params: InsightsRangeParams & { limit?: number } = {},
+  signal?: AbortSignal
+): Promise<TopCategoryRow[]> => {
+  const { data } = await http.get<{ rows: TopCategoryRow[] }>(
+    "/api/transactions/insights/top-categories",
+    { ...auth(token), params, signal }
+  );
+  return data.rows;
+};
+
+// Top merchants (by expense)
+export const fetchTopMerchants = async (
+  token: string,
+  params: InsightsRangeParams & { limit?: number } = {},
+  signal?: AbortSignal
+): Promise<TopMerchantRow[]> => {
+  const { data } = await http.get<{ rows: TopMerchantRow[] }>(
+    "/api/transactions/insights/top-merchants",
+    { ...auth(token), params, signal }
+  );
+  return data.rows;
+};
+
+// Largest single expenses
+export const fetchLargestExpenses = async (
+  token: string,
+  params: InsightsRangeParams & { limit?: number } = {},
+  signal?: AbortSignal
+): Promise<LargestExpenseRow[]> => {
+  const { data } = await http.get<{ rows: LargestExpenseRow[] }>(
+    "/api/transactions/insights/largest",
+    { ...auth(token), params, signal }
+  );
+  return data.rows;
+};
+
+// Burn-rate (avg daily + 30d projection)
+export const fetchBurnRate = async (
+  token: string,
+  params: InsightsRangeParams = {},
+  signal?: AbortSignal
+): Promise<BurnRateResponse> => {
+  const { data } = await http.get<BurnRateResponse>(
+    "/api/transactions/insights/burn-rate",
+    { ...auth(token), params, signal }
+  );
   return data;
 };
