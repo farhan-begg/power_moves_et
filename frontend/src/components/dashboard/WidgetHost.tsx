@@ -18,6 +18,7 @@ import PlaidLinkButton from "../PlaidLinkButton";
 import GoalsWidget from "../widgets/GoalsWidget";
 import CategoryPieWidget from "../widgets/CategoryPieWidget";
 import UpcomingBillsWidget from "../widgets/UpcomingBillsWidget";
+import CryptoPortfolioWidget from "../widgets/CryptoPortfolioWidget";
 
 const registry: Record<WidgetType, React.ComponentType> = {
   "plaid-connect":  PlaidLinkButton,
@@ -37,6 +38,7 @@ const registry: Record<WidgetType, React.ComponentType> = {
         "category-pie": CategoryPieWidget,  
         
  "upcoming-bills": UpcomingBillsWidget,
+  "crypto-portfolio": (props) => <CryptoPortfolioWidget {...props} />,
 };
 
 export default function WidgetHost({ type }: { type: WidgetType }) {

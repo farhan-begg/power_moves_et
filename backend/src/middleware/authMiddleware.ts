@@ -44,3 +44,20 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction) => 
     return res.status(401).json({ error: "Token invalid", details: err.message });
   }
 };
+
+
+
+// middleware/auth.ts
+export const protectSse = (req: AuthRequest, res: Response, next: NextFunction) => {
+  // Allow token via query param for SSE
+  const token = (req.query.token as string) || "";
+  if (!token) return res.status(401).json({ error: "Not authorized, no token" });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    req.user = decoded.id;
+    next();
+  } catch (err: any) {
+    return res.status(401).json({ error: "Token invalid", details: err.message });
+  }
+};

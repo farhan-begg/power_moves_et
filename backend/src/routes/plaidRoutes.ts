@@ -9,8 +9,18 @@ import { encrypt, decrypt } from "../utils/cryptoUtils";
 import { Products, CountryCode } from "plaid";
 import ManualAsset from "../models/ManualAsset";
 import { runAccountIdBackfillForUser } from "../services/plaidBackfillService";
+// server/routes/plaidRoutes.ts (top of file)
+import Asset from "../models/Asset";
+import { getLiveUsdPrices as getCoinGeckoPricesByIds } from "../services/coinGeckoService";
 
 const router = Router();
+
+console.log("🔗 router file:", __filename);
+
+router.get("/_where", (_req, res) => {
+  res.json({ where: __filename });
+});
+
 
 /** Helper: get decrypted Plaid access token or send a 400 */
 async function getDecryptedAccessToken(req: AuthRequest, res: Response): Promise<string | null> {
@@ -169,9 +179,7 @@ router.get("/cards", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
-/* ----------------------------------------------------------
-   5) Net worth (assets - debts) with Liabilities refinement
----------------------------------------------------------- */
+// --- 5) Net worth (assets - debts) with Liabilities refinement + crypto via Asset ---
 router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
   try {
     const accessToken = await getDecryptedAccessToken(req, res);
@@ -179,9 +187,9 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
 
     const filterAccountId = String(req.query.accountId || "").trim() || null;
 
+    // ---- 5.1 Pull Plaid accounts
     const { data } = await plaidClient.accountsBalanceGet({ access_token: accessToken });
     let accounts = data.accounts;
-
     if (filterAccountId) {
       accounts = accounts.filter(
         (a) => a.account_id === filterAccountId || (a as any).accountId === filterAccountId
@@ -190,62 +198,41 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
 
     const sum = (arr: number[]) => arr.reduce((s, n) => s + (Number.isFinite(n) ? n : 0), 0);
 
-    // assets
+    // ---- 5.2 Assets from Plaid accounts
     const assetTypes = new Set(["depository", "investment"]);
     const assetsPlaid = sum(
       accounts.filter((a) => assetTypes.has(a.type as any)).map((a) => a.balances.current || 0)
     );
 
-    // debts
+    // ---- 5.3 Debts from Plaid accounts (refined by Liabilities when available)
     const debtTypes = new Set(["credit", "loan"]);
     let debts = sum(
       accounts.filter((a) => debtTypes.has(a.type as any)).map((a) => Math.max(a.balances.current || 0, 0))
     );
-
-    // refine with Liabilities if available
     try {
       const liab = await plaidClient.liabilitiesGet({ access_token: accessToken });
-      const credit = liab.data.liabilities?.credit ?? [];
-      const student = liab.data.liabilities?.student ?? [];
-      const mortgage = liab.data.liabilities?.mortgage ?? [];
-
       const allowedIds = new Set(accounts.map((a) => a.account_id));
 
-      const creditSum = sum(
-        credit
-          .filter((c: any) => allowedIds.has(String(c.account_id)))
-          .map((c: any) => {
-            const acct = accounts.find((a) => a.account_id === String(c.account_id));
-            return acct?.balances?.current || 0;
-          })
-      );
+      const liabSum = (rows: any[]) =>
+        sum(
+          rows
+            .filter((r) => allowedIds.has(String(r.account_id)))
+            .map((r) => {
+              const acct = accounts.find((a) => a.account_id === String(r.account_id));
+              return acct?.balances?.current || 0;
+            })
+        );
 
-      const studentSum = sum(
-        student
-          .filter((s: any) => allowedIds.has(String(s.account_id)))
-          .map((s: any) => {
-            const acct = accounts.find((a) => a.account_id === String(s.account_id));
-            return acct?.balances?.current || 0;
-          })
-      );
-
-      const mortgageSum = sum(
-        mortgage
-          .filter((m: any) => allowedIds.has(String(m.account_id)))
-          .map((m: any) => {
-            const acct = accounts.find((a) => a.account_id === String(m.account_id));
-            return acct?.balances?.current || 0;
-          })
-      );
-
+      const creditSum = liabSum(liab.data.liabilities?.credit ?? []);
+      const studentSum = liabSum(liab.data.liabilities?.student ?? []);
+      const mortgageSum = liabSum(liab.data.liabilities?.mortgage ?? []);
       debts = creditSum + studentSum + mortgageSum;
     } catch {
-      /* ignore; fall back to balances */
+      /* ignore - use balances fallback */
     }
 
-    // manual pieces
+    // ---- 5.4 Manual cash from manual transactions
     const userId = new mongoose.Types.ObjectId(String(req.user));
-
     const manualTxnMatch: any = { userId, source: "manual" };
     if (filterAccountId) manualTxnMatch.accountId = filterAccountId;
     const manualAgg = await Transaction.aggregate([
@@ -260,6 +247,7 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
     ]);
     const manualCash = (manualAgg[0]?.income || 0) - (manualAgg[0]?.expense || 0);
 
+    // ---- 5.5 Manual assets (properties, vehicles, etc.)
     let manualAssetsTotal = 0;
     if (filterAccountId) {
       const accAssets = await ManualAsset.aggregate([
@@ -275,9 +263,41 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
       manualAssetsTotal = allAssets[0]?.total ?? 0;
     }
 
-    const assetsWithManual = assetsPlaid + manualCash + manualAssetsTotal;
-    const netWorth = assetsWithManual - debts;
+    // ---- 5.6 Crypto via Asset (kind: "crypto"), with live price fallback
+    const cryptoQuery: any = { userId, kind: "crypto" };
+    if (filterAccountId) cryptoQuery.accountId = filterAccountId;
 
+    const cryptoHoldings = await Asset.find(cryptoQuery).lean();
+
+    // get unique CoinGecko IDs and fetch live USD prices (cached in service)
+    const cgIds = Array.from(
+      new Set(cryptoHoldings.map((h) => h.cgId).filter(Boolean) as string[])
+    );
+    const priceMap = cgIds.length ? await getCoinGeckoPricesByIds(cgIds) : {};
+
+    const cryptoRows = cryptoHoldings.map((h) => {
+      const live = h.cgId ? priceMap[h.cgId] : undefined;
+      const price = typeof live === "number" ? live : (h.lastPrice ?? 0);
+      const qty = h.quantity ?? 0;
+      const valueUsd = qty * (price || 0);
+      return {
+        accountId: h.accountId || null,
+        name: h.name || null,
+        symbol: h.symbol || null,
+        cgId: h.cgId || null,
+        quantity: qty,
+        price,
+        valueUsd,
+      };
+    });
+
+    const cryptoTotal = sum(cryptoRows.map((r) => r.valueUsd));
+
+    // ---- 5.7 Final math
+    const assetsTotal = assetsPlaid + manualCash + manualAssetsTotal + cryptoTotal;
+    const netWorth = assetsTotal - debts;
+
+    // ---- 5.8 Breakdown
     const breakdownByType: Record<string, number> = {};
     for (const a of accounts) {
       const key = a.type || "other";
@@ -285,10 +305,12 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
     }
     breakdownByType["manual_cash"] = manualCash;
     breakdownByType["manual_assets"] = manualAssetsTotal;
+    breakdownByType["crypto"] = cryptoTotal;
 
+    // ---- 5.9 Response
     res.json({
       summary: {
-        assets: Number(assetsWithManual.toFixed(2)),
+        assets: Number(assetsTotal.toFixed(2)),
         debts: Number(debts.toFixed(2)),
         netWorth: Number(netWorth.toFixed(2)),
       },
@@ -296,6 +318,7 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
         cash: Number(manualCash.toFixed(2)),
         assets: Number(manualAssetsTotal.toFixed(2)),
       },
+      crypto: cryptoRows,
       breakdownByType,
       currencyHint: accounts[0]?.balances?.iso_currency_code || "USD",
       appliedFilter: filterAccountId || null,
@@ -467,6 +490,9 @@ router.get("/investments", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+
+
+
 /* ----------------------------------------------------------
    (Optional) quick route debugger
 ---------------------------------------------------------- */
@@ -476,5 +502,10 @@ router.get("/_debug-routes", (_req, res) => {
     .flatMap((l: any) => Object.keys(l.route.methods).map((m) => `${m.toUpperCase()} ${l.route.path}`));
   res.json(list);
 });
+
+router.get("/health", (_req, res) => {
+  res.json({ ok: true, where: "plaidRoutes" });
+});
+
 
 export default router;

@@ -835,6 +835,76 @@ function FeatureCard({
   );
 }
 
+function Spotlight() {
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = ref.current!;
+    const onMove = (e: MouseEvent) => {
+      const x = e.clientX;
+      const y = e.clientY;
+      el.style.setProperty("--sx", x + "px");
+      el.style.setProperty("--sy", y + "px");
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+
+
+  function MagneticButton({
+  children,
+  className = "",
+  onClick,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  const ref = React.useRef<HTMLButtonElement>(null);
+
+  React.useEffect(() => {
+    const btn = ref.current!;
+    const mm = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (mm.matches) return;
+
+    const enter = (e: MouseEvent) => {
+      const r = btn.getBoundingClientRect();
+      const x = e.clientX - r.left - r.width / 2;
+      const y = e.clientY - r.top - r.height / 2;
+      gsap.to(btn, { x: x * 0.18, y: y * 0.18, rotate: x * 0.02, duration: 0.3, ease: "power3" });
+    };
+    const leave = () => gsap.to(btn, { x: 0, y: 0, rotate: 0, duration: 0.45, ease: "power3" });
+
+    btn.addEventListener("mousemove", enter);
+    btn.addEventListener("mouseleave", leave);
+    return () => {
+      btn.removeEventListener("mousemove", enter);
+      btn.removeEventListener("mouseleave", leave);
+    };
+  }, []);
+
+  return (
+    <button ref={ref} onClick={onClick} className={className}>
+      {children}
+    </button>
+  );
+}
+
+  return (
+    <div
+      ref={ref}
+      className="pointer-events-none fixed inset-0 -z-10"
+      style={{
+        background:
+          "radial-gradient(180px 180px at var(--sx) var(--sy), rgba(34,211,238,0.15), transparent 60%)",
+        transition: "background-position 80ms linear",
+        mixBlendMode: "screen",
+      }}
+    />
+  );
+}
+
+
 function ImageCard({ src, caption }: { src: string; caption: string }) {
   return (
     <figure

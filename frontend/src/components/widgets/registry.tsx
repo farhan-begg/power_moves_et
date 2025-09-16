@@ -18,6 +18,7 @@ import PlaidLinkButton from "../PlaidLinkButton";
 import GoalsWidget from "./GoalsWidget";
 import CategoryPieWidget from "./CategoryPieWidget";
 import UpcomingBillsWidget from "./UpcomingBillsWidget";
+import CryptoPortfolioWidget from "./CryptoPortfolioWidget";
 
 export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
   "plaid-connect": PlaidLinkButton,
@@ -35,4 +36,5 @@ export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
   "advice": AdviceWidget,       
         "goals": GoalsWidget,       // 👈 added
           "category-pie": CategoryPieWidget, "upcoming-bills": UpcomingBillsWidget,
+           "crypto-portfolio": (props) => <CryptoPortfolioWidget {...props} />,
 };

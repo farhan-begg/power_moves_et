@@ -1,3 +1,4 @@
+// src/features/widgets/widgetsSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export type WidgetType =
@@ -16,8 +17,9 @@ export type WidgetType =
   | "advice"
   | "goals"
   | "category-pie"
+  | "upcoming-bills"
   // 👇 NEW
-  | "upcoming-bills";
+  | "crypto-portfolio";
 
 export type WidgetSize = "sm" | "lg";
 
@@ -53,9 +55,9 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" },
   w14: { id: "w14", type: "goals",                title: "Goals",               size: "sm" },
   w15: { id: "w15", type: "category-pie",         title: "Category Summary",    size: "sm" },
-
-  // 👇 NEW default
   w16: { id: "w16", type: "upcoming-bills",       title: "Upcoming Bills",      size: "sm" },
+  // 👇 NEW default crypto widget (large by default)
+  w17: { id: "w17", type: "crypto-portfolio",     title: "Crypto Portfolio",    size: "lg" },
 };
 
 export const DEFAULT_ORDER = [
@@ -64,10 +66,11 @@ export const DEFAULT_ORDER = [
   "w14",
   "w5","w7",
   "w15",
-  // 👇 place near spending widgets
   "w16",
   "w9","w12",
   "w10","w11",
+  // 👇 place crypto next to investments/stocks
+  "w17",
   "w13",
 ];
 

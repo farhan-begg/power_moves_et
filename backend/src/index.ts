@@ -4,7 +4,6 @@ import mongoose from "mongoose";
 import cors from "cors";
 
 import transactionRoutes from "./routes/transactionRoutes";
-import plaidRoutes from "./routes/plaidRoutes";
 import authRoutes from "./routes/authRoutes";
 import manualAssetRoutes from "./routes/manualAssetRoutes";
 import positionsRoutes from "./routes/positionsRoutes";
@@ -13,7 +12,8 @@ import goalRoutes from "./routes/goalRoutes";
 import manualAccountRoutes from "./routes/manualAccountRoutes";
 import categoryRoutes from "./routes/categoryRoutes";
 import recurringRoutes from "./routes/recurringRoutes";
-
+import cryptoRoutes from "./routes/cryptoRoutes";
+import plaidRoutes from "./routes/plaidRoutes";
 dotenv.config();
 
 const app = express();
@@ -42,16 +42,18 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 });
 
 /* ---------- Routes ---------- */
+app.use("/api/crypto", cryptoRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/stocks", positionsRoutes);
-app.use("/api/plaid", plaidRoutes);
+app.use("/api/plaid", plaidRoutes)
 app.use("/api/manual-assets", manualAssetRoutes);
 app.use("/api/advice", adviceRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/manual-accounts", manualAccountRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/recurring", recurringRoutes);
+
 
 const RUN_DAILY_MS = 24 * 60 * 60 * 1000;
 setTimeout(() => {
