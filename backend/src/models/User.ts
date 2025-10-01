@@ -1,6 +1,7 @@
 // src/models/User.ts
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
+import { encrypt, decrypt } from "../utils/cryptoUtils"; // import your AES utils
 
 export interface IPlaidToken {
   content: string;
@@ -13,7 +14,13 @@ export interface IUser extends Document {
   email: string;
   password: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
-  plaidAccessToken: IPlaidToken | null; // <-- allow null
+
+  // Encrypted in DB
+  plaidAccessToken: IPlaidToken | null;
+
+  // Helpers
+  setPlaidAccessToken(rawToken: string): void;
+  getPlaidAccessToken(): string | null;
 }
 
 const PlaidTokenSchema = new Schema<IPlaidToken>(
@@ -27,16 +34,22 @@ const PlaidTokenSchema = new Schema<IPlaidToken>(
 
 const UserSchema: Schema<IUser> = new Schema(
   {
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      lowercase: true,
+      trim: true,
+    },
     password: { type: String, required: true },
-    // Use the sub-schema instead of Mixed, so TS & Mongoose agree
     plaidAccessToken: { type: PlaidTokenSchema, default: null },
   },
   { timestamps: true }
 );
 
-// Hash password before saving
+// 🔒 Hash password before saving
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   const salt = await bcrypt.genSalt(10);
@@ -44,8 +57,32 @@ UserSchema.pre("save", async function (next) {
   next();
 });
 
-UserSchema.methods.comparePassword = async function (candidatePassword: string) {
+// 🔑 Compare password helper
+UserSchema.methods.comparePassword = async function (
+  candidatePassword: string
+) {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+// 🔐 Store Plaid token securely
+UserSchema.methods.setPlaidAccessToken = function (rawToken: string) {
+  this.plaidAccessToken = encrypt(rawToken);
+};
+
+// 🔓 Retrieve Plaid token (decrypted)
+UserSchema.methods.getPlaidAccessToken = function (): string | null {
+  if (!this.plaidAccessToken) return null;
+  return decrypt(this.plaidAccessToken);
+};
+
+// 🚫 Hide sensitive fields in JSON output
+UserSchema.set("toJSON", {
+  transform: (_doc, ret: any) => {
+    delete ret.password;
+    delete ret.plaidAccessToken;
+    return ret;
+  },
+});
+
 
 export default mongoose.model<IUser>("User", UserSchema);

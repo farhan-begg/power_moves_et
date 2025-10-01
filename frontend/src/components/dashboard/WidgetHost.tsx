@@ -14,7 +14,7 @@ import InvestmentsWidget from "../widgets/InvestmentsWidget";
 import StocksPortfolioWidget from "../widgets/StocksPortfolioWidget";
 import type { WidgetType } from "../../features/widgets/widgetsSlice";
 import AdviceWidget from "../widgets/AdviceWidget";
-import PlaidLinkButton from "../PlaidLinkButton";
+import PlaidLinkButton from "../widgets/PlaidLinkButton";
 import GoalsWidget from "../widgets/GoalsWidget";
 import CategoryPieWidget from "../widgets/CategoryPieWidget";
 import UpcomingBillsWidget from "../widgets/UpcomingBillsWidget";

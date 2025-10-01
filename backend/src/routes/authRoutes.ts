@@ -41,10 +41,6 @@ router.get("/me", protect, async (req: AuthRequest, res: Response) => {
 });
 
 // =============================
-// @route   POST /api/auth/register
-// @desc    Register new user
-// @access  Public
-// =============================
 router.post("/register", async (req, res) => {
   try {
     console.log("📥 Register body:", req.body);
@@ -61,13 +57,25 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Email already registered" });
     }
 
-    const user = new User({ name, email, password });
+    const user = new User({ 
+      name, 
+      email, 
+      password, 
+      plaidAccessToken: null // explicitly start null
+    });
+
     await user.save();
+
     const token = generateToken((user._id as any).toString());
 
     return res.status(201).json({
       token,
-      user: { id: user._id, name: user.name, email: user.email },
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        plaidLinked: !!user.plaidAccessToken 
+      },
     });
   } catch (err: any) {
     console.error("❌ Registration error:", err.message, err);
@@ -79,6 +87,7 @@ router.post("/register", async (req, res) => {
       .json({ error: "Registration failed", details: err.message });
   }
 });
+
 
 // =============================
 // @route   POST /api/auth/login
@@ -98,7 +107,6 @@ router.post("/login", async (req, res) => {
     }
 
    const token = generateToken((user._id as any).toString());
-
 
     // 🔄 Background Plaid sync (fire and forget)
     (async () => {
