@@ -23,25 +23,24 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Add ALL allowed origins
 const allowedOrigins = [
-  "http://localhost:3000",               // local React dev
-  "https://your-frontend.vercel.app"     // deployed frontend
+  "http://localhost:3000",              // local React dev
+  "https://powermoves.onrender.com",    // your deployed frontend
 ];
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow Postman/curl
-      if (allowedOrigins.some(o => origin.startsWith(o))) {
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      console.warn("🚫 Blocked by CORS:", origin);
       return callback(new Error("Not allowed by CORS"));
     },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
-  }) // ✅ close cors() properly
+  })
 );
+
 
 // ✅ now this parses fine
 app.use((req: Request, _res: Response, next: NextFunction) => {
