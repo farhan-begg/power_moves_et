@@ -11,6 +11,6 @@ export type ManualAccountDTO = {
 };
 
 export async function fetchManualAccounts(token: string): Promise<ManualAccountDTO[]> {
-  const { data } = await http.get("/api/transactions/manual-accounts", auth(token));
+  const { data } = await http.get("/transactions/manual-accounts", auth(token));
   return Array.isArray(data) ? data : [];
 }

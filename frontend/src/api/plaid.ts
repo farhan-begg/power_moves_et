@@ -40,20 +40,20 @@ export type NetWorthResponse = {
 
 // Transactions (synced from Plaid → your DB)
 export const fetchPlaidTransactions = async (token: string): Promise<any[]> => {
-  const { data } = await http.get("/api/plaid/transactions", auth(token));
+  const { data } = await http.get("/plaid/transactions", auth(token));
   return Array.isArray(data) ? data : (data?.transactions ?? []);
 };
 
 // Create Link Token (POST)
 export const createLinkToken = async (token: string): Promise<{ link_token: string }> => {
-  const { data } = await http.post("/api/plaid/link-token", {}, auth(token));
+  const { data } = await http.post("/plaid/link-token", {}, auth(token));
   return data;
 };
 
 // Exchange Public Token (POST)
 export const exchangePublicToken = async (token: string, publicToken: string): Promise<{ message: string }> => {
   const { data } = await http.post(
-    "/api/plaid/exchange-public-token",
+    "/plaid/exchange-public-token",
     { public_token: publicToken },
     auth(token)
   );
@@ -62,19 +62,19 @@ export const exchangePublicToken = async (token: string, publicToken: string): P
 
 // Accounts → return an array
 export const fetchPlaidAccounts = async (token: string): Promise<PlaidAccount[]> => {
-  const { data } = await http.get("/api/plaid/accounts", auth(token));
+  const { data } = await http.get("/plaid/accounts", auth(token));
   return Array.isArray(data) ? data : (data?.accounts ?? []);
 };
 
 // Cards → return an array
 export const fetchPlaidCards = async (token: string): Promise<CardItem[]> => {
-  const { data } = await http.get("/api/plaid/cards", auth(token));
+  const { data } = await http.get("/plaid/cards", auth(token));
   return Array.isArray(data) ? data : (data?.cards ?? []);
 };
 
 // Net worth (keep object)
 export const fetchNetWorth = async (token: string): Promise<NetWorthResponse> => {
-  const { data } = await http.get<NetWorthResponse>("/api/plaid/net-worth", auth(token));
+  const { data } = await http.get<NetWorthResponse>("/plaid/net-worth", auth(token));
   return data;
 };
 
@@ -84,7 +84,7 @@ export const fetchInvestments = async (token: string): Promise<{
   securities: any[];
   accounts: any[];
 }> => {
-  const { data } = await http.get("/api/plaid/investments", auth(token));
+  const { data } = await http.get("/plaid/investments", auth(token));
   return data;
 };
 
@@ -97,7 +97,7 @@ export async function syncPlaidTransactions(
   if (opts?.accountId) params.set("accountId", opts.accountId);
   if (opts?.accountIds?.length) params.set("accountIds", opts.accountIds.join(","));
 
-  const url = `/api/plaid/transactions${params.toString() ? `?${params}` : ""}`;
+  const url = `/plaid/transactions${params.toString() ? `?${params}` : ""}`;
 
   const { data } = await http.get(url, auth(token));
   // your backend returns an array; normalize just in case

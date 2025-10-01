@@ -8,7 +8,7 @@ export type Category = {
   updatedAt: string;
 };
 
-const base = "/api/categories";
+const base = "/categories";
 
 export async function listCategories(token: string): Promise<Category[]> {
   const r = await fetch(base, { headers: { Authorization: `Bearer ${token}` } });

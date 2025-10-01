@@ -46,7 +46,7 @@ export const fetchGoals = async (
   params?: { type?: string; status?: string }
 ): Promise<Goal[]> => {
   const qs = params ? `?${new URLSearchParams(params as any).toString()}` : "";
-  const { data } = await http.get(`/api/goals${qs}`, auth(token));
+  const { data } = await http.get(`/goals${qs}`, auth(token));
   return Array.isArray(data) ? data : [];
 };
 
@@ -56,7 +56,7 @@ export const createGoal = async (
   body: Pick<Goal, "name" | "type" | "targetAmount" | "currency"> &
         Partial<Pick<Goal, "startDate" | "deadline" | "recurrence" | "linkages">>
 ): Promise<Goal> => {
-  const { data } = await http.post(`/api/goals`, body, auth(token));
+  const { data } = await http.post(`/goals`, body, auth(token));
   return data;
 };
 
@@ -66,13 +66,13 @@ export const updateGoal = async (
   id: string,
   patch: Partial<Omit<Goal, "_id" | "createdAt" | "updatedAt">>
 ): Promise<Goal> => {
-  const { data } = await http.patch(`/api/goals/${id}`, patch, auth(token));
+  const { data } = await http.patch(`/goals/${id}`, patch, auth(token));
   return data;
 };
 
 // Delete
 export const deleteGoal = async (token: string, id: string): Promise<{ ok: true }> => {
-  const { data } = await http.delete(`/api/goals/${id}`, auth(token));
+  const { data } = await http.delete(`/goals/${id}`, auth(token));
   return data;
 };
 
@@ -82,18 +82,18 @@ export const addGoalContribution = async (
   id: string,
   contrib: Contribution
 ): Promise<Goal> => {
-  const { data } = await http.post(`/api/goals/${id}/contributions`, contrib, auth(token));
+  const { data } = await http.post(`/goals/${id}/contributions`, contrib, auth(token));
   return data;
 };
 
 // Recalculate cache
 export const recalcGoal = async (token: string, id: string): Promise<Goal> => {
-  const { data } = await http.post(`/api/goals/${id}/recalculate`, {}, auth(token));
+  const { data } = await http.post(`/goals/${id}/recalculate`, {}, auth(token));
   return data;
 };
 
 // Rollover (spending_limit)
 export const rolloverGoal = async (token: string, id: string): Promise<Goal> => {
-  const { data } = await http.post(`/api/goals/${id}/rollover`, {}, auth(token));
+  const { data } = await http.post(`/goals/${id}/rollover`, {}, auth(token));
   return data;
 };

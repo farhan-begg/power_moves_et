@@ -1,4 +1,4 @@
-// src/api/recurring.ts
+// src/recurring.ts
 import { http, auth } from "./http";
 
 export type OverviewResponse = {
@@ -54,13 +54,13 @@ async function getWithFallback<T>(
 }
 
 export async function fetchRecurringOverview(token: string, horizonDays = 40): Promise<OverviewResponse> {
-  const data = await getWithFallback<any>(token, "/api/recurring/overview", "/recurring/overview", { horizonDays });
+  const data = await getWithFallback<any>(token, "/recurring/overview", "/recurring/overview", { horizonDays });
   return normalizeOverview(data);
 }
 
 export async function runRecurringDetection(token: string, lookbackDays = 180) {
   try {
-    const { data } = await http.post("/api/recurring/detect", { lookbackDays }, auth(token));
+    const { data } = await http.post("/recurring/detect", { lookbackDays }, auth(token));
     return data as { created?: number; matched?: number; applied?: boolean };
   } catch (err: any) {
     if (err?.response?.status === 404) {
@@ -83,7 +83,7 @@ export type MatchBillPayload =
 
 export async function matchBillPayment(token: string, payload: MatchBillPayload) {
   try {
-    const { data } = await http.post("/api/recurring/bills/match", payload, auth(token));
+    const { data } = await http.post("/recurring/bills/match", payload, auth(token));
     return data as { ok: true };
   } catch (err: any) {
     if (err?.response?.status === 404) {
@@ -100,6 +100,6 @@ export async function matchBillPayment(token: string, payload: MatchBillPayload)
 }
 
 export async function matchPaycheck(token: string, payload: { txId: string; amount: number; date?: string; seriesId?: string; accountId?: string; employerName?: string; }) {
-  const { data } = await http.post("/api/recurring/paychecks/match", payload, auth(token));
+  const { data } = await http.post("/recurring/paychecks/match", payload, auth(token));
   return data as { ok: true };
 }

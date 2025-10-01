@@ -1,12 +1,12 @@
 import { http, auth } from "./http";
 
 export const registerUser = async (name: string, email: string, password: string) => {
-  const { data } = await http.post("/api/auth/register", { name, email, password });
+  const { data } = await http.post("/auth/register", { name, email, password });
   return data;
 };
 
 export const loginUser = async (email: string, password: string) => {
-  const { data } = await http.post("/api/auth/login", { email, password });
+  const { data } = await http.post("/auth/login", { email, password });
   return data;
 };
 

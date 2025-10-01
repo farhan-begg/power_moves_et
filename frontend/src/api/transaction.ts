@@ -1,4 +1,4 @@
-// src/api/transaction.ts
+// src/transaction.ts
 import { http, auth } from "./http";
 
 /** ------------------ Types ------------------ */
@@ -140,7 +140,7 @@ export const fetchTransactions = async (
   params: TransactionsQuery = {}
 ): Promise<PagedTransactionsResponse> => {
   const qs = buildQueryString(params);
-  const url = qs ? `/api/transactions?${qs}` : "/api/transactions";
+  const url = qs ? `/transactions?${qs}` : "/transactions";
   logGet(url);
   const { data } = await http.get<PagedTransactionsResponse>(url, auth(token));
   return data;
@@ -177,7 +177,7 @@ export const addTransaction = async (
     plaidTxId?: string | null;
   }
 ) => {
-  const res = await http.post<Transaction>("/api/transactions", data, auth(token));
+  const res = await http.post<Transaction>("/transactions", data, auth(token));
   return res.data;
 };
 
@@ -219,13 +219,13 @@ export const updateTransaction = async (
     matchConfidence: number | null;
   }>
 ) => {
-  const res = await http.put<Transaction>(`/api/transactions/${id}`, data, auth(token));
+  const res = await http.put<Transaction>(`/transactions/${id}`, data, auth(token));
   return res.data;
 };
 
 export const deleteTransaction = async (token: string, id: string) => {
   const res = await http.delete<{ message: string; id: string }>(
-    `/api/transactions/${id}`,
+    `/transactions/${id}`,
     auth(token)
   );
   return res.data;
@@ -236,7 +236,7 @@ export const fetchCategoryStats = async (
   params: { startDate?: string; endDate?: string; accountId?: string; accountIds?: string } = {},
   signal?: AbortSignal
 ): Promise<CategoryStatRow[]> => {
-  const { data } = await http.get<CategoryStatRow[]>("/api/transactions/stats", {
+  const { data } = await http.get<CategoryStatRow[]>("/transactions/stats", {
     ...auth(token),
     params,
     signal,
@@ -255,7 +255,7 @@ export const fetchSummary = async (
   },
   signal?: AbortSignal
 ): Promise<SummaryResponse> => {
-  const { data } = await http.get<SummaryResponse>("/api/transactions/summary", {
+  const { data } = await http.get<SummaryResponse>("/transactions/summary", {
     ...auth(token),
     params,
     signal,
@@ -267,7 +267,7 @@ export const bulkCategorize = async (
   token: string,
   payload: { ids: string[]; categoryId?: string; categoryName?: string }
 ): Promise<{ ok: boolean; matched: number; modified: number }> => {
-  const { data } = await http.post("/api/transactions/bulk-categorize", payload, auth(token));
+  const { data } = await http.post("/transactions/bulk-categorize", payload, auth(token));
   return data;
 };
 
@@ -280,7 +280,7 @@ export const fetchTopCategories = async (
   signal?: AbortSignal
 ): Promise<TopCategoryRow[]> => {
   const { data } = await http.get<{ rows: TopCategoryRow[] }>(
-    "/api/transactions/insights/top-categories",
+    "/transactions/insights/top-categories",
     { ...auth(token), params, signal }
   );
   return data.rows;
@@ -293,7 +293,7 @@ export const fetchTopMerchants = async (
   signal?: AbortSignal
 ): Promise<TopMerchantRow[]> => {
   const { data } = await http.get<{ rows: TopMerchantRow[] }>(
-    "/api/transactions/insights/top-merchants",
+    "/transactions/insights/top-merchants",
     { ...auth(token), params, signal }
   );
   return data.rows;
@@ -306,7 +306,7 @@ export const fetchLargestExpenses = async (
   signal?: AbortSignal
 ): Promise<LargestExpenseRow[]> => {
   const { data } = await http.get<{ rows: LargestExpenseRow[] }>(
-    "/api/transactions/insights/largest",
+    "/transactions/insights/largest",
     { ...auth(token), params, signal }
   );
   return data.rows;
@@ -319,7 +319,7 @@ export const fetchBurnRate = async (
   signal?: AbortSignal
 ): Promise<BurnRateResponse> => {
   const { data } = await http.get<BurnRateResponse>(
-    "/api/transactions/insights/burn-rate",
+    "/transactions/insights/burn-rate",
     { ...auth(token), params, signal }
   );
   return data;

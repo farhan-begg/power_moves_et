@@ -1,4 +1,4 @@
-// src/api/crypto.ts
+// src/crypto.ts
 import { http, auth } from "./http";
 
 /* ----------------------------- Types ----------------------------- */
@@ -78,7 +78,7 @@ export type UpdateLotPayload = {
 
 export type DeleteLotPayload = { id: string; lotId: string };
 
-/* ---- SSE event typing (what /api/crypto/stream sends on "prices") ---- */
+/* ---- SSE event typing (what /crypto/stream sends on "prices") ---- */
 export type CryptoPriceRow = {
   id: string;              // holding _id
   cgId?: string | null;
@@ -189,7 +189,7 @@ async function deleteWithFallback<T>(
 export async function fetchCryptoPortfolio(token: string, accountId?: string): Promise<CryptoPortfolioResponse> {
   return getWithFallback<CryptoPortfolioResponse>(
     token,
-    "/api/crypto/portfolio",
+    "/crypto/portfolio",
     "/crypto/portfolio",
     accountId ? { accountId } : undefined
   );
@@ -198,7 +198,7 @@ export async function fetchCryptoPortfolio(token: string, accountId?: string): P
 export async function listHoldings(token: string, accountId?: string) {
   return getWithFallback<any[]>(
     token,
-    "/api/crypto/holdings",
+    "/crypto/holdings",
     "/crypto/holdings",
     accountId ? { accountId } : undefined
   );
@@ -206,31 +206,31 @@ export async function listHoldings(token: string, accountId?: string) {
 
 export async function getHolding(token: string, id: string) {
   // If you add a backend GET /crypto/holdings/:id later, this is ready.
-  return getWithFallback<any>(token, `/api/crypto/holdings/${id}`, `/crypto/holdings/${id}`);
+  return getWithFallback<any>(token, `/crypto/holdings/${id}`, `/crypto/holdings/${id}`);
 }
 
 /* ---------------------------- Mutations ---------------------------- */
 export async function upsertHolding(token: string, payload: CreateOrUpdateHoldingPayload) {
-  return postWithFallback<any>(token, "/api/crypto/holdings", "/crypto/holdings", payload);
+  return postWithFallback<any>(token, "/crypto/holdings", "/crypto/holdings", payload);
 }
 
 export async function deleteHolding(token: string, id: string) {
-  return deleteWithFallback<any>(token, `/api/crypto/holdings/${id}`, `/crypto/holdings/${id}`);
+  return deleteWithFallback<any>(token, `/crypto/holdings/${id}`, `/crypto/holdings/${id}`);
 }
 
 export async function addLot(token: string, payload: AddLotPayload) {
   const { id, ...body } = payload;
-  return postWithFallback<any>(token, `/api/crypto/holdings/${id}/lots`, `/crypto/holdings/${id}/lots`, body);
+  return postWithFallback<any>(token, `/crypto/holdings/${id}/lots`, `/crypto/holdings/${id}/lots`, body);
 }
 
 export async function updateLot(token: string, payload: UpdateLotPayload) {
   const { id, lotId, ...body } = payload;
-  return putWithFallback<any>(token, `/api/crypto/holdings/${id}/lots/${lotId}`, `/crypto/holdings/${id}/lots/${lotId}`, body);
+  return putWithFallback<any>(token, `/crypto/holdings/${id}/lots/${lotId}`, `/crypto/holdings/${id}/lots/${lotId}`, body);
 }
 
 export async function deleteLot(token: string, payload: DeleteLotPayload) {
   const { id, lotId } = payload;
-  return deleteWithFallback<any>(token, `/api/crypto/holdings/${id}/lots/${lotId}`, `/crypto/holdings/${id}/lots/${lotId}`);
+  return deleteWithFallback<any>(token, `/crypto/holdings/${id}/lots/${lotId}`, `/crypto/holdings/${id}/lots/${lotId}`);
 }
 
 /* ----------------------------- SSE ----------------------------- */
@@ -246,7 +246,7 @@ export function openCryptoPriceStream(token: string, qs?: { accountId?: string }
 
   // Try EventSourcePolyfill if available to send the Bearer token header
   const AnyES: any = (window as any).EventSourcePolyfill || (window as any).EventSource;
-  const url = `/api/crypto/stream?${params.toString()}`;
+  const url = `/crypto/stream?${params.toString()}`;
 
   try {
     if ((window as any).EventSourcePolyfill) {
@@ -301,7 +301,7 @@ export type PnlSeriesResponse = { cgId: string; holdingId: string; series: PnlPo
 
 
 export async function fetchPnlSeries(holdingId: string, days: number | "max"): Promise<PnlSeriesResponse | null> {
-  const url = new URL("/api/crypto/pnl-series", window.location.origin);
+  const url = new URL("/crypto/pnl-series", window.location.origin);
   url.searchParams.set("holdingId", holdingId);
   url.searchParams.set("days", String(days));
   const res = await fetch(url.toString(), { headers: authHeader() });
@@ -310,7 +310,7 @@ export async function fetchPnlSeries(holdingId: string, days: number | "max"): P
   return res.json();
 }
 
-// frontend/src/api/crypto.ts
+// frontend/src/crypto.ts
 export type PricePoint = { t: number; price: number };
 export type PriceSeriesResponse = { series: PricePoint[] };
 
@@ -321,7 +321,7 @@ function authHeader() {
 }
 
 export async function fetchPriceSeries(cgId: string, days: number | "max"): Promise<PriceSeriesResponse> {
-  const url = new URL("/api/crypto/price-series", window.location.origin);
+  const url = new URL("/crypto/price-series", window.location.origin);
   url.searchParams.set("cgId", cgId);
   url.searchParams.set("days", String(days));
   const res = await fetch(url.toString(), { headers: authHeader() });
