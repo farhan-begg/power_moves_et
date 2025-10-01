@@ -18,6 +18,6 @@ export interface UserInfo {
 }
 
 export const fetchUserInfo = async (token: string): Promise<UserInfo> => {
-  const { data } = await http.get<UserInfo>("/api/auth/me", auth(token));
+  const { data } = await http.get<UserInfo>("/auth/me", auth(token));
   return data;
 };
