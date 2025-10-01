@@ -12,6 +12,9 @@ import { fetchPlaidAccounts } from "../../api/plaid";
 import type { PlaidAccount } from "../../types/plaid";
 import { localYMD, formatMMDDYYYY } from "../../helpers/date";
 
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
+
 /* ---------- types ---------- */
 type ManualAsset = {
   _id: string;
@@ -161,7 +164,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 
   const loadAssets = useCallback(async () => {
     if (!jwt) return;
-    const res = await fetch("http://localhost:5000/api/manual-assets", { headers: authHeaders });
+    const res = await fetch(`${API_BASE}/manual-assets`,{ headers: authHeaders });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     setAssets(data);
@@ -240,7 +243,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
         payload.accountId = selectedAccountId;
       }
 
-      const res = await fetch("http://localhost:5000/api/transactions", {
+      const res = await fetch(`${API_BASE}/transactions`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify(payload),
@@ -288,8 +291,8 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
       }
 
       const url = editId
-        ? `http://localhost:5000/api/manual-assets/${editId}`
-        : "http://localhost:5000/api/manual-assets";
+        ? `${API_BASE}/manual-assets/${editId}`
+        : `${API_BASE}/manual-assets`;
 
       const res = await fetch(url, {
         method: editId ? "PUT" : "POST",
@@ -321,7 +324,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     setSaving(true);
     setErrLocal(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/manual-assets/${id}`, {
+      const res = await fetch(`${API_BASE}/manual-assets/${id}`, {
         method: "DELETE",
         headers: authHeaders,
       });

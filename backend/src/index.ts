@@ -23,28 +23,27 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const allowedOrigins =
-  process.env.NODE_ENV === "production"
-    ? ["https://your-frontend.vercel.app"] // your deployed frontend URL
-    : ["http://localhost:3000"]; // dev React
-
-
+const allowedOrigins = [
+  "http://localhost:3000",               // local React dev
+  "https://your-frontend.vercel.app"     // deployed frontend
+];
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, origin);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+      if (!origin) return callback(null, true); // allow Postman/curl
+      if (allowedOrigins.some(o => origin.startsWith(o))) {
+        return callback(null, true);
       }
+      console.warn("🚫 Blocked by CORS:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
-  })
+  }) // ✅ close cors() properly
 );
 
-// Request logger (typed)
+// ✅ now this parses fine
 app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log("📝 Request:", req.method, req.url);
   if (req.body && Object.keys(req.body).length > 0) {
@@ -52,6 +51,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   }
   next();
 });
+
 
 /* ---------- Routes ---------- */
 app.use("/api/crypto", cryptoRoutes);
@@ -107,13 +107,20 @@ mongoose
   .connect(mongoUri)
   .then(() => {
     console.log("✅ MongoDB Connected");
+
     app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+      if (process.env.NODE_ENV === "production") {
+        console.log(`🚀 Server is live on Render (bound to port ${PORT})`);
+        console.log(`🌐 Public URL: ${process.env.RENDER_EXTERNAL_URL || "Render will assign one"}`);
+      } else {
+        console.log(`🚀 Server running locally at http://localhost:${PORT}`);
+      }
     });
   })
   .catch((err) => {
     console.error("❌ MongoDB connection error:", err);
     process.exit(1);
   });
+
 
 export default app;

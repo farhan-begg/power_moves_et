@@ -1,7 +1,9 @@
 // src/features/plaid/plaidSlice.ts
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
-const API = "http://localhost:5000/api/plaid";
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API = `${API_BASE}/plaid`;
+
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
 });
@@ -32,15 +34,13 @@ export const fetchAccounts = createAsyncThunk("plaid/accounts", async () => {
   const res = await fetch(`${API}/accounts`, { headers: authHeaders() });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || "Failed to fetch accounts");
-  // backend returns { accounts }
-  return json.accounts ?? json; // ← handles old shape too
+  return json.accounts ?? json;
 });
 
 export const fetchCards = createAsyncThunk("plaid/cards", async () => {
   const res = await fetch(`${API}/cards`, { headers: authHeaders() });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || "Failed to fetch cards");
-  // backend returns { source, cards }
   return json.cards ?? json;
 });
 
@@ -56,27 +56,26 @@ export const fetchInvestments = createAsyncThunk<InvestmentsResponse>(
           "Failed to fetch investments"
       );
     }
-    // backend returns { totalValue, holdings, securities }
     return { totalValue: json.totalValue ?? 0, holdings: json.holdings ?? [] };
   }
 );
 
-/**
- * Net worth with optional per-account filtering.
- * Call like: dispatch(fetchNetWorth()) or dispatch(fetchNetWorth({ accountId }))
- */
 export const fetchNetWorth = createAsyncThunk(
   "plaid/netWorth",
   async ({ accountId }: { accountId?: string } = {}) => {
     const token = localStorage.getItem("token") ?? "";
-    const url = new URL("http://localhost:5000/api/plaid/net-worth");
+    const url = new URL(`${API}/net-worth`);
 
-    // ✅ Only set when it's a specific account, not "all"/"__all__"/empty/undefined/null
-    if (accountId && !["all", "__all__", "undefined", "null", ""].includes(String(accountId))) {
+    if (
+      accountId &&
+      !["all", "__all__", "undefined", "null", ""].includes(String(accountId))
+    ) {
       url.searchParams.set("accountId", accountId);
     }
 
-    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to fetch net worth");
     return json;
@@ -132,16 +131,14 @@ const slice = createSlice({
     b.addCase(fetchNetWorth.pending, (state) => {
       state.loading = true;
       state.error = null;
-      // ❌ don't wipe state.netWorth here; keep previous data to avoid flicker
-    })
+    });
     b.addCase(fetchNetWorth.fulfilled, (state, action) => {
       state.loading = false;
       state.netWorth = action.payload;
-    })
-      b.addCase(fetchNetWorth.rejected, (state, action) => {
+    });
+    b.addCase(fetchNetWorth.rejected, (state, action) => {
       state.loading = false;
       state.error = action.error.message || "Failed to fetch net worth";
-      // keep last good state.netWorth
     });
   },
 });

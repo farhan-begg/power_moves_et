@@ -6,8 +6,10 @@ import {
   type PlaidLinkOnExit,
 } from "react-plaid-link";
 
-async function hit(url: string, jwt: string, opts?: RequestInit) {
-  const res = await fetch(url, {
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
+async function hit(path: string, jwt: string, opts?: RequestInit) {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
@@ -15,7 +17,6 @@ async function hit(url: string, jwt: string, opts?: RequestInit) {
       ...(opts?.headers || {}),
     },
   });
-  // swallow body on non-OK to get a readable error
   if (!res.ok) throw new Error(await res.text());
   return res.json().catch(() => ({}));
 }
@@ -32,45 +33,53 @@ function PlaidLinkButton({
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const onSuccess = useCallback<PlaidLinkOnSuccess>(async (public_token) => {
-    try {
-      setErr(null);
-      setBusy(true);
+  const onSuccess = useCallback<PlaidLinkOnSuccess>(
+    async (public_token) => {
+      try {
+        setErr(null);
+        setBusy(true);
 
-      // 1) exchange token
-      await hit("http://localhost:5000/api/plaid/exchange-public-token", jwt, {
-        method: "POST",
-        body: JSON.stringify({ public_token }),
-      });
+        // 1) exchange token
+        await hit("/plaid/exchange-public-token", jwt, {
+          method: "POST",
+          body: JSON.stringify({ public_token }),
+        });
 
-      // 2) warm/sync data so your widgets have something to fetch
-      await Promise.allSettled([
-        // this GET triggers your upsert sync
-        hit("http://localhost:5000/api/plaid/transactions", jwt),
-        // these just warm caches / prove connectivity (ignore results)
-        hit("http://localhost:5000/api/plaid/accounts", jwt),
-        hit("http://localhost:5000/api/plaid/investments", jwt).catch(() => {}),
-        hit("http://localhost:5000/api/plaid/net-worth", jwt).catch(() => {}),
-      ]);
+        // 2) warm/sync data so your widgets have something to fetch
+        await Promise.allSettled([
+          hit("/plaid/transactions", jwt),
+          hit("/plaid/accounts", jwt),
+          hit("/plaid/investments", jwt).catch(() => {}),
+          hit("/plaid/net-worth", jwt).catch(() => {}),
+        ]);
 
-      // 3) tell the app it’s ready
-      if (onLinked) onLinked();
-      else window.location.reload(); // simple fallback if you don’t wire a callback
-    } catch (e: any) {
-      setErr(e?.message || "Linking failed");
-    } finally {
-      setBusy(false);
-    }
-  }, [jwt, onLinked]);
+        // 3) tell the app it’s ready
+        if (onLinked) onLinked();
+        else window.location.reload();
+      } catch (e: any) {
+        setErr(e?.message || "Linking failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [jwt, onLinked]
+  );
 
   const onExit = useCallback<PlaidLinkOnExit>((error) => {
     if (error) {
-      setErr(`${error.error_code}: ${error.display_message || error.error_message || "Link exited"}`);
+      setErr(
+        `${error.error_code}: ${
+          error.display_message || error.error_message || "Link exited"
+        }`
+      );
     }
   }, []);
 
-  // only initialize Plaid when we actually have a token
-  const { open, ready } = usePlaidLink({ token, onSuccess, onExit } as PlaidLinkOptions);
+  const { open, ready } = usePlaidLink({
+    token,
+    onSuccess,
+    onExit,
+  } as PlaidLinkOptions);
 
   return (
     <>
@@ -95,9 +104,12 @@ export default function LinkPlaidWidget({ onLinked }: { onLinked?: () => void })
     setError(null);
     setLinkToken(null);
     try {
-      const res = await fetch("http://localhost:5000/api/plaid/link-token", {
+      const res = await fetch(`${API_BASE}/plaid/link-token`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`,
+        },
         body: JSON.stringify({}),
       });
       const json = await res.json();
@@ -108,7 +120,9 @@ export default function LinkPlaidWidget({ onLinked }: { onLinked?: () => void })
     }
   }, [jwt]);
 
-  useEffect(() => { createLinkToken(); }, [createLinkToken]);
+  useEffect(() => {
+    createLinkToken();
+  }, [createLinkToken]);
 
   return (
     <div className="p-3">

@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload as DefaultJwtPayload } from "jsonwebtoken";
-
 import dotenv from "dotenv";
-dotenv.config(); // 🟢 MUST be called before using process.env
 
+dotenv.config();
 
 if (!process.env.JWT_SECRET) {
   throw new Error("❌ JWT_SECRET is not defined in environment variables");
@@ -11,7 +10,17 @@ if (!process.env.JWT_SECRET) {
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
-export interface AuthRequest extends Request {
+/**
+ * Authenticated Request type
+ * - Keeps Express' built-in body/params/query
+ * - Adds optional `user` property
+ */
+export interface AuthRequest<
+  P = any,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = any
+> extends Request<P, ResBody, ReqBody, ReqQuery> {
   user?: string;
 }
 
@@ -22,34 +31,22 @@ interface JwtPayload extends DefaultJwtPayload {
 export const protect = (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.warn("❌ No Authorization header provided");
     return res.status(401).json({ error: "Not authorized, no token" });
   }
 
   const token = authHeader.split(" ")[1];
-  console.log("➡️ Incoming token:", token);
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-
-    if (!decoded || typeof decoded !== "object" || !("id" in decoded)) {
-      throw new Error("Invalid token payload structure");
-    }
-
-    console.log("✅ Decoded JWT:", decoded);
     req.user = decoded.id;
     next();
   } catch (err: any) {
-    console.error("❌ JWT verification failed:", err.message);
     return res.status(401).json({ error: "Token invalid", details: err.message });
   }
 };
 
-
-
-// middleware/auth.ts
+// For Server-Sent Events
 export const protectSse = (req: AuthRequest, res: Response, next: NextFunction) => {
-  // Allow token via query param for SSE
   const token = (req.query.token as string) || "";
   if (!token) return res.status(401).json({ error: "Not authorized, no token" });
 
