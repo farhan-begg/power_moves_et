@@ -34,11 +34,20 @@ router.get("/me", protect, async (req: AuthRequest, res: Response) => {
 });
 
 // Register
+// Register
 router.post("/register", async (req, res) => {
   try {
+    console.log("📥 Register body:", req.body);
+
     const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
     const userExists = await User.findOne({ email });
-    if (userExists) return res.status(400).json({ error: "User already exists" });
+    if (userExists) {
+      return res.status(400).json({ error: "User already exists" });
+    }
 
     const user = new User({ name, email, password });
     await user.save();
@@ -50,11 +59,12 @@ router.post("/register", async (req, res) => {
       token,
       user: { id: user._id, name: user.name, email: user.email },
     });
-  } catch (err) {
-    console.error("❌ Registration error:", err);
-    res.status(500).json({ error: "Registration failed" });
+  } catch (err: any) {
+    console.error("❌ Registration error:", err.message, err.stack);
+    res.status(500).json({ error: "Registration failed", details: err.message });
   }
 });
+
 
 
 // Login with auto Plaid sync
