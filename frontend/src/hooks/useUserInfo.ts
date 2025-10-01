@@ -12,7 +12,7 @@ export const useUserInfo = (token: string | null) =>
   useQuery<UserInfo>({
     queryKey: ["userInfo"],
     queryFn: async () => {
-      const { data } = await axios.get<UserInfo>("/api/auth/me", {
+      const { data } = await axios.get<UserInfo>("auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
       return data;

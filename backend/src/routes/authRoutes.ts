@@ -1,21 +1,26 @@
+// src/routes/auth.ts
 import { Router, Response } from "express";
 import User from "../models/User";
 import jwt from "jsonwebtoken";
 import plaidClient from "../services/plaidService";
 import { decrypt } from "../utils/cryptoUtils";
 import Transaction from "../models/Transaction";
-import { protect, AuthRequest } from "../middleware/authMiddleware"; // <-- add this
-
+import { protect, AuthRequest } from "../middleware/authMiddleware";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 
 console.log("🔐 Using JWT_SECRET:", JWT_SECRET);
 
+function generateToken(userId: string) {
+  return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: "1d" });
+}
 
-
-
-// GET /api/auth/me  -> current user profile (requires Bearer token)
+// =============================
+// @route   GET /api/auth/me
+// @desc    Get current user profile
+// @access  Private
+// =============================
 router.get("/me", protect, async (req: AuthRequest, res: Response) => {
   try {
     const user = await User.findById(req.user).select("-password -__v");
@@ -29,29 +34,36 @@ router.get("/me", protect, async (req: AuthRequest, res: Response) => {
     });
   } catch (err: any) {
     console.error("❌ /me error:", err.message || err);
-    res.status(500).json({ error: "Failed to fetch user", details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch user", details: err.message });
   }
 });
 
-// Register
+// =============================
+// @route   POST /api/auth/register
+// @desc    Register new user
+// @access  Public
+// =============================
 router.post("/register", async (req, res) => {
   try {
     console.log("📥 Register body:", req.body);
 
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
-      return res.status(400).json({ error: "All fields are required" });
+      return res
+        .status(400)
+        .json({ error: "Name, email, and password are required" });
     }
 
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return res.status(400).json({ error: "User already exists" });
+      return res.status(400).json({ error: "Email already registered" });
     }
 
     const user = new User({ name, email, password });
     await user.save();
-
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1d" });
+    const token = generateToken((user._id as any).toString());
 
     return res.status(201).json({
       token,
@@ -60,26 +72,35 @@ router.post("/register", async (req, res) => {
   } catch (err: any) {
     console.error("❌ Registration error:", err.message, err);
     if (err.code === 11000) {
-      // duplicate key (email)
       return res.status(400).json({ error: "Email already registered" });
     }
-    return res.status(500).json({ error: "Registration failed", details: err.message });
+    return res
+      .status(500)
+      .json({ error: "Registration failed", details: err.message });
   }
 });
 
-
-// Login with auto Plaid sync
+// =============================
+// @route   POST /api/auth/login
+// @desc    Login user + auto Plaid sync
+// @access  Public
+// =============================
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
     const user = await User.findOne({ email });
     if (!user || !(await user.comparePassword(password))) {
       return res.status(400).json({ error: "Invalid email or password" });
     }
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1d" });
+   const token = generateToken((user._id as any).toString());
 
-    // 🔄 Background Plaid Sync
+
+    // 🔄 Background Plaid sync (fire and forget)
     (async () => {
       if (user.plaidAccessToken) {
         try {
@@ -99,8 +120,6 @@ router.post("/login", async (req, res) => {
 
           const formattedTransactions = plaidTransactions.map((txn: any) => {
             let type: "income" | "expense" = "expense";
-
-            // ✅ Use Plaid’s category classification
             if (txn.personal_finance_category?.primary?.startsWith("INCOME")) {
               type = "income";
             }
@@ -150,8 +169,5 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ error: "Login failed", details: err.message });
   }
 });
-
-
-
 
 export default router;

@@ -1,144 +1,137 @@
-import { useEffect, useState, useCallback } from "react";
+// src/components/PlaidLinkButton.tsx
+import React from "react";
+import { usePlaidLink } from "react-plaid-link";
+import { useSelector } from "react-redux";
+import { RootState } from "../../../app/store";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  usePlaidLink,
-  type PlaidLinkOptions,
-  type PlaidLinkOnSuccess,
-  type PlaidLinkOnExit,
-} from "react-plaid-link";
+  syncPlaidTransactions,
+  createLinkToken,
+  exchangePublicToken,
+} from "../../../api/plaid";
+import { http, auth } from "../../../api/http"; // still used for /auth/me
 
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+type UserInfo = {
+  id: string;
+  name: string;
+  email: string;
+  plaidAccessToken?: { content: string; iv: string; tag: string } | null;
+};
 
-async function hit(path: string, jwt: string, opts?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${jwt}`,
-      ...(opts?.headers || {}),
+export default function PlaidLinkButton() {
+  const token = useSelector((s: RootState) => s.auth.token);
+  const qc = useQueryClient();
+
+  const [linkToken, setLinkToken] = React.useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+
+  // ✅ Fetch user info
+  const { data: userInfo } = useQuery<UserInfo>({
+    queryKey: ["userInfo"],
+    enabled: Boolean(token),
+    queryFn: async () => {
+      const { data } = await http.get<UserInfo>("/auth/me", auth(token ?? undefined));
+      return data;
     },
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json().catch(() => ({}));
-}
 
-function PlaidLinkButton({
-  token,
-  jwt,
-  onLinked,
-}: {
-  token: string;
-  jwt: string;
-  onLinked?: () => void;
-}) {
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const isLinked = Boolean(userInfo?.plaidAccessToken);
 
-  const onSuccess = useCallback<PlaidLinkOnSuccess>(
-    async (public_token) => {
-      try {
-        setErr(null);
-        setBusy(true);
-
-        // 1) exchange token
-        await hit("/plaid/exchange-public-token", jwt, {
-          method: "POST",
-          body: JSON.stringify({ public_token }),
-        });
-
-        // 2) warm/sync data so your widgets have something to fetch
-        await Promise.allSettled([
-          hit("/plaid/transactions", jwt),
-          hit("/plaid/accounts", jwt),
-          hit("/plaid/investments", jwt).catch(() => {}),
-          hit("/plaid/net-worth", jwt).catch(() => {}),
-        ]);
-
-        // 3) tell the app it’s ready
-        if (onLinked) onLinked();
-        else window.location.reload();
-      } catch (e: any) {
-        setErr(e?.message || "Linking failed");
-      } finally {
-        setBusy(false);
-      }
+  // ✅ Create link token
+  const createLink = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error("Missing auth token");
+      const data = await createLinkToken(token);
+      return data.link_token;
     },
-    [jwt, onLinked]
-  );
+    onSuccess: (lt) => {
+      console.log("✅ Link token created:", lt);
+      setLinkToken(lt);
+    },
+    onError: (err: any) => {
+      console.error("❌ Link token error:", err);
+      setErrorMsg(err?.response?.data?.error || "Failed to create link token");
+    },
+  });
 
-  const onExit = useCallback<PlaidLinkOnExit>((error) => {
-    if (error) {
-      setErr(
-        `${error.error_code}: ${
-          error.display_message || error.error_message || "Link exited"
-        }`
-      );
+  // ✅ Exchange public token
+  const exchangeToken = useMutation({
+    mutationFn: async (publicToken: string) => {
+      if (!token) throw new Error("Missing auth token");
+      await exchangePublicToken(token, publicToken);
+    },
+    onSuccess: async () => {
+      console.log("✅ Public token exchanged. Running initial sync...");
+      try {
+        if (token) await syncPlaidTransactions(token);
+      } catch (e) {
+        console.error("❌ Initial sync failed:", e);
+      }
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["userInfo"] }),
+        qc.invalidateQueries({ queryKey: ["accounts"] }),
+        qc.invalidateQueries({ queryKey: ["transactions"] }),
+        qc.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
+      ]);
+
+      window.dispatchEvent(new Event("plaid:linked"));
+    },
+    onError: (err: any) => {
+      console.error("❌ Exchange error:", err);
+      setErrorMsg(err?.response?.data?.error || "Failed to link account");
+    },
+  });
+
+  // Auto-create link token if not linked
+  React.useEffect(() => {
+    if (token && !isLinked && !createLink.isPending && !linkToken) {
+      createLink.mutate();
     }
-  }, []);
+  }, [token, isLinked, linkToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ✅ Plaid hook
   const { open, ready } = usePlaidLink({
-    token,
-    onSuccess,
-    onExit,
-  } as PlaidLinkOptions);
+    token: linkToken || "",
+    onSuccess: (publicToken: string) => {
+      console.log("✅ Got Plaid public_token:", publicToken);
+      exchangeToken.mutate(publicToken);
+    },
+  });
+
+  if (!token) return null;
+
+  if (isLinked) {
+    return (
+      <div className="inline-flex items-center gap-2">
+        <span className="px-3 py-1 rounded-full text-sm font-medium text-emerald-300 bg-emerald-400/10 ring-1 ring-emerald-400/20">
+          ✓ Bank connected
+        </span>
+      </div>
+    );
+  }
+
+  const disabled =
+    !ready || createLink.isPending || exchangeToken.isPending || !linkToken;
 
   return (
-    <>
-      {err && <div className="text-red-300 mb-2 text-sm">{err}</div>}
+    <div className="inline-flex flex-col items-start gap-2">
       <button
+        type="button"
         onClick={() => open()}
-        disabled={!ready || busy}
-        className="px-3 py-2 rounded-lg bg-emerald-500 disabled:opacity-50"
+        disabled={disabled}
+        className="px-4 py-2 rounded-lg font-medium text-white
+                   bg-indigo-600/90 hover:bg-indigo-500
+                   disabled:opacity-50
+                   backdrop-blur-md border border-white/10 shadow-lg"
       >
-        {busy ? "Linking…" : "Link accounts"}
+        {createLink.isPending
+          ? "Preparing…"
+          : exchangeToken.isPending
+          ? "Linking…"
+          : "Connect bank with Plaid"}
       </button>
-    </>
-  );
-}
-
-export default function LinkPlaidWidget({ onLinked }: { onLinked?: () => void }) {
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const jwt = localStorage.getItem("token") ?? "";
-
-  const createLinkToken = useCallback(async () => {
-    setError(null);
-    setLinkToken(null);
-    try {
-      const res = await fetch(`${API_BASE}/plaid/link-token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to create link token");
-      setLinkToken(json.link_token);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to create link token");
-    }
-  }, [jwt]);
-
-  useEffect(() => {
-    createLinkToken();
-  }, [createLinkToken]);
-
-  return (
-    <div className="p-3">
-      {error && <div className="text-red-300 mb-2 text-sm">{error}</div>}
-
-      {!linkToken ? (
-        <button onClick={createLinkToken} className="px-3 py-2 rounded-lg bg-slate-700">
-          {error ? "Retry" : "Preparing…"}
-        </button>
-      ) : (
-        <PlaidLinkButton token={linkToken} jwt={jwt} onLinked={onLinked} />
-      )}
-
-      <p className="text-xs opacity-70 mt-2">
-        Connect to fetch net worth, cards, investments, and recent transactions.
-      </p>
+      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
     </div>
   );
 }

@@ -1,11 +1,11 @@
 // src/components/PlaidLinkButton.tsx
 import React from "react";
-import { usePlaidLink } from "react-plaid-link";
-import axios from "axios";
+import { usePlaidLink, PlaidLinkOnSuccessMetadata } from "react-plaid-link";
 import { useSelector } from "react-redux";
 import { RootState } from "../app/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { syncPlaidTransactions } from "../api/plaid";
+import { http, auth } from "../api/http"; // ✅ use shared axios instance
 
 type LinkTokenRes = { link_token: string };
 type UserInfo = {
@@ -27,9 +27,7 @@ export default function PlaidLinkButton() {
     queryKey: ["userInfo"],
     enabled: Boolean(token),
     queryFn: async () => {
-      const { data } = await axios.get<UserInfo>("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { data } = await http.get<UserInfo>("/auth/me", auth(token));
       return data;
     },
   });
@@ -39,10 +37,10 @@ export default function PlaidLinkButton() {
   // ✅ Create link token
   const createLinkToken = useMutation({
     mutationFn: async () => {
-      const { data } = await axios.post<LinkTokenRes>(
-        "/api/plaid/link-token",
+      const { data } = await http.post<LinkTokenRes>(
+        "/plaid/link-token",
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        auth(token)
       );
       return data.link_token;
     },
@@ -53,22 +51,20 @@ export default function PlaidLinkButton() {
 
   // ✅ Exchange public token
   const exchangePublicToken = useMutation({
-    mutationFn: async (public_token: string) => {
-      await axios.post(
-        "/api/plaid/exchange-public-token",
-        { public_token },
-        { headers: { Authorization: `Bearer ${token}` } }
+    mutationFn: async (publicToken: string) => {
+      await http.post(
+        "/plaid/exchange-public-token",
+        { public_token: publicToken },
+        auth(token)
       );
     },
     onSuccess: async () => {
       try {
-        // Do an immediate sync (optional but recommended)
         if (token) await syncPlaidTransactions(token);
       } catch (e) {
         console.error("❌ Initial sync failed:", e);
       }
 
-      // Update react-query caches
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["userInfo"] }),
         qc.invalidateQueries({ queryKey: ["accounts"] }),
@@ -76,24 +72,25 @@ export default function PlaidLinkButton() {
         qc.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
       ]);
 
-      // Broadcast event for dashboard
       window.dispatchEvent(new Event("plaid:linked"));
     },
     onError: (err: any) =>
       setErrorMsg(err?.response?.data?.error || "Failed to link account"),
   });
 
-  // Automatically create link token on mount if not linked
+  // Auto-create link token
   React.useEffect(() => {
     if (token && !isLinked && !createLinkToken.isPending) {
       createLinkToken.mutate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, isLinked]);
+  }, [token, isLinked]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ✅ Plaid link hook with explicit typing
   const { open, ready } = usePlaidLink({
     token: linkToken || "",
-    onSuccess: (public_token) => exchangePublicToken.mutate(public_token),
+    onSuccess: (publicToken: string, _metadata: PlaidLinkOnSuccessMetadata) => {
+      exchangePublicToken.mutate(publicToken);
+    },
   });
 
   if (!token) return null;

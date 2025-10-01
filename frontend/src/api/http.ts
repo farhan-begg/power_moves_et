@@ -9,5 +9,6 @@ export const http = axios.create({
 });
 
 // Small helper to add Authorization header
-export const auth = (token?: string) =>
+// src/api/http.ts
+export const auth = (token?: string | null) =>
   token ? { headers: { Authorization: `Bearer ${token}` } } : {};
