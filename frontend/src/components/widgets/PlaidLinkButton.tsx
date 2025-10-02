@@ -24,7 +24,7 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
   const [linkToken, setLinkToken] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
-  // ✅ Check if user already linked
+  // ✅ Fetch current user info
   const { data: userInfo } = useQuery<UserInfo>({
     queryKey: ["userInfo"],
     enabled: Boolean(token),
@@ -38,7 +38,7 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
 
   const isLinked = Boolean(userInfo?.plaidAccessToken);
 
-  // ✅ Create link token
+  // ✅ Create link token (when not linked yet)
   const createLinkToken = useMutation({
     mutationFn: async () => {
       const { data } = await axios.post<LinkTokenRes>(
@@ -53,7 +53,7 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
       setErrorMsg(err?.response?.data?.error || "Failed to create link token"),
   });
 
-  // ✅ Exchange public token
+  // ✅ Exchange public token for access token
   const exchangePublicToken = useMutation({
     mutationFn: async (public_token: string) => {
       await axios.post(
@@ -88,6 +88,7 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, isLinked]);
 
+  // ✅ Hook into Plaid Link
   const { open, ready } = usePlaidLink({
     token: linkToken || "",
     onSuccess: (public_token) => exchangePublicToken.mutate(public_token),
@@ -100,48 +101,49 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
     }
   }, [autoOpen, ready, linkToken, isLinked, open]);
 
+  // 🚫 Don’t render if no auth
   if (!token) return null;
 
-// inside PlaidLinkButton.tsx render()
-if (isLinked) {
+  // ✅ Already linked → show status badge
+  if (isLinked) {
+    return (
+      <div className="inline-flex items-center gap-2">
+        <span className="px-3 py-1 rounded-full text-sm font-medium text-emerald-300 bg-emerald-400/10 ring-1 ring-emerald-400/20">
+          ✓ Bank connected
+        </span>
+      </div>
+    );
+  }
+
+  const disabled =
+    !ready ||
+    createLinkToken.isPending ||
+    exchangePublicToken.isPending ||
+    !linkToken;
+
+  // ✅ Connect button
   return (
-    <div className="inline-flex items-center gap-2">
-      <span className="px-3 py-1 rounded-full text-sm font-medium text-emerald-300 bg-emerald-400/10 ring-1 ring-emerald-400/20">
-        ✓ Bank connected
-      </span>
+    <div className="inline-flex flex-col items-start gap-2">
+      <button
+        type="button"
+        onClick={() => open()}
+        disabled={disabled}
+        className={`px-5 py-2.5 rounded-xl font-medium text-white transition
+                    backdrop-blur-md border border-white/10
+                    bg-white/10 hover:bg-white/15
+                    ${
+                      disabled
+                        ? "opacity-50 cursor-not-allowed"
+                        : "shadow-[0_0_12px_rgba(34,211,238,0.1)]"
+                    }`}
+      >
+        {createLinkToken.isPending
+          ? "Preparing…"
+          : exchangePublicToken.isPending
+          ? "Linking…"
+          : "Connect with Plaid"}
+      </button>
+      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
     </div>
   );
 }
-
-const disabled =
-  !ready ||
-  createLinkToken.isPending ||
-  exchangePublicToken.isPending ||
-  !linkToken;
-
-return (
-  <div className="inline-flex flex-col items-start gap-2">
-    <button
-      type="button"
-      onClick={() => open()}
-      disabled={disabled}
-      className={`px-5 py-2.5 rounded-xl font-medium text-white transition
-                  backdrop-blur-md border border-white/10
-                  bg-white/10 hover:bg-white/15
-                  ${disabled ? "opacity-50 cursor-not-allowed" : "shadow-[0_0_12px_rgba(34,211,238,0.1)]"}`}
-    >
-      {createLinkToken.isPending
-        ? "Preparing…"
-        : exchangePublicToken.isPending
-        ? "Linking…"
-        : "Connect with Plaid"}
-    </button>
-    {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
-  </div>
-);
-
-
-}
-
-
-
