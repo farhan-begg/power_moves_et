@@ -89,11 +89,13 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
   }, [token, isLinked]);
 
   // ✅ Hook into Plaid Link
-  const { open, ready } = usePlaidLink({
-    token: linkToken || "",
-    onSuccess: (public_token) => exchangePublicToken.mutate(public_token),
-  });
-
+const { open, ready } = usePlaidLink({
+  token: linkToken || "",
+  onSuccess: (public_token, metadata) => {
+    console.log("✅ Got public_token:", public_token, metadata);
+    exchangePublicToken.mutate(public_token);
+  },
+});
   // 🚨 Auto-open Plaid modal if requested
   useEffect(() => {
     if (autoOpen && ready && linkToken && !isLinked) {

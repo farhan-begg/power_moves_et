@@ -41,7 +41,7 @@ router.post("/link-token", protect, async (req: AuthRequest, res: Response) => {
       products: [Products.Transactions, Products.Liabilities, Products.Investments],
       country_codes: [CountryCode.Us],
       language: "en",
-      webhook: process.env.PLAID_WEBHOOK_URL || undefined, // 👈 REQUIRED for production
+    webhook: process.env.PLAID_WEBHOOK_URL, // 👈 now comes from your .
     });
     res.json({ link_token: data.link_token });
   } catch (err: any) {
@@ -57,7 +57,7 @@ router.post("/exchange-public-token", protect, async (req: AuthRequest, res: Res
   try {
     const { public_token } = req.body as { public_token?: string };
     if (!public_token) return res.status(400).json({ error: "public_token is required" });
-
+ console.log("🔍 exchange-public-token body:", req.body);  // add this
     const { data } = await plaidClient.itemPublicTokenExchange({ public_token });
     await User.findByIdAndUpdate(String(req.user), { plaidAccessToken: encrypt(data.access_token) });
 
@@ -177,18 +177,35 @@ router.get("/investments", protect, async (req: AuthRequest, res: Response) => {
 /* ----------------------------------------------------------
    6) Webhook handler (production requirement)
 ---------------------------------------------------------- */
+/* ----------------------------------------------------------
+   6) Webhook handler
+---------------------------------------------------------- */
 router.post("/webhook", async (req, res) => {
   try {
     const { webhook_type, webhook_code, item_id } = req.body;
+
     console.log("📡 Plaid webhook:", webhook_type, webhook_code, item_id);
 
-    // TODO: handle transaction updates, ITEM errors, etc.
-    res.sendStatus(200);
+    // Example: transactions updates
+    if (webhook_type === "TRANSACTIONS" && webhook_code === "DEFAULT_UPDATE") {
+      console.log("🔄 New transactions ready for item:", item_id);
+      // 👉 Here you can enqueue a background job to call /transactions/sync or /transactions/get
+      // and refresh MongoDB.
+    }
+
+    // Example: item errors
+    if (webhook_type === "ITEM" && webhook_code === "ERROR") {
+      console.error("❌ Item error:", req.body.error);
+      // 👉 Consider notifying user or marking account as errored
+    }
+
+    res.sendStatus(200); // Always ACK or Plaid retries
   } catch (e) {
     console.error("❌ Webhook handler error:", (e as any)?.message || e);
     res.sendStatus(500);
   }
 });
+
 
 router.get("/health", (_req, res) => {
   res.json({ ok: true, where: "plaidRoutes" });
