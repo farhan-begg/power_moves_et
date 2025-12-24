@@ -20,34 +20,47 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 /* ---------- Middleware ---------- */
+/* ---------- Middleware ---------- */
+console.log("🔥 USING plaidRoutes FILE:", __filename);
+
+// ✅ 1) CORS FIRST
+const allowedOrigins = [
+  "http://localhost:3001",
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:3000",
+  "https://powermoves.onrender.com",
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    console.log("🌍 CORS origin:", JSON.stringify(origin));
+
+    // allow curl/postman/no-origin
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // ✅ DON'T throw Error (no 500)
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
+
+// ✅ 2) THEN parse body
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Add ALL allowed origins
-const allowedOrigins = [
-  "http://localhost:3000",              // local React dev
-  "https://powermoves.onrender.com",    // your deployed frontend
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
-
-
-// ✅ now this parses fine
+// ✅ 3) Logger
 app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log("📝 Request:", req.method, req.url);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log("📝 Parsed Body:", req.body);
-  }
   next();
 });
 

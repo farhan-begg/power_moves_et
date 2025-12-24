@@ -48,9 +48,8 @@ const { data: raw, isLoading } = useQuery({
               </div>
               <div className="text-right">
                 <div className="text-sm text-white/70">Balance</div>
-                <div className="font-mono tabular-nums text-white">
-                  {money(a.balances.current ?? 0, a.balances.isoCurrencyCode ?? "USD")}
-                </div>
+            {money(a.balances?.current ?? 0, a.balances?.isoCurrencyCode ?? "USD")}
+
               </div>
             </div>
           ))}

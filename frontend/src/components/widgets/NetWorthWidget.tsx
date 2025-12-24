@@ -144,23 +144,13 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId]);
 
-  const refreshTimer = useRef<number | null>(null);
   useEffect(() => {
-    if (refreshTimer.current) {
-      window.clearTimeout(refreshTimer.current);
-      refreshTimer.current = null;
-    }
-    refreshTimer.current = window.setTimeout(() => {
-      refresh();
-      refreshTimer.current = null;
-    }, 120);
-    return () => {
-      if (refreshTimer.current) {
-        window.clearTimeout(refreshTimer.current);
-        refreshTimer.current = null;
-      }
-    };
-  }, [refresh]);
+  const t = window.setTimeout(() => {
+    refresh();
+  }, 250);
+
+  return () => window.clearTimeout(t);
+}, [selectedAccountId, refresh]);
 
   const loadAssets = useCallback(async () => {
     if (!jwt) return;

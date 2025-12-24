@@ -17,7 +17,7 @@ export interface IUser extends Document {
 
   // Encrypted in DB
   plaidAccessToken: IPlaidToken | null;
-
+  plaidItemId: string | null; // ✅ ADD
   // Helpers
   setPlaidAccessToken(rawToken: string): void;
   getPlaidAccessToken(): string | null;
@@ -43,8 +43,11 @@ const UserSchema: Schema<IUser> = new Schema(
       lowercase: true,
       trim: true,
     },
+    plaidItemId: { type: String, default: null }, // ✅ ADD
+
     password: { type: String, required: true },
     plaidAccessToken: { type: PlaidTokenSchema, default: null },
+    
   },
   { timestamps: true }
 );
