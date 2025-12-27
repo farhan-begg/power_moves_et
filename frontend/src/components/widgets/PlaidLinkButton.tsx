@@ -1,66 +1,73 @@
-// src/components/PlaidLinkButton.tsx
-import React, { useEffect } from "react";
+// src/components/widgets/plaid/PlaidLinkButton.tsx
+import React from "react";
 import { usePlaidLink } from "react-plaid-link";
-import axios from "axios";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { syncPlaidTransactions } from "../../api/plaid";
-
-type LinkTokenRes = { link_token: string };
-type UserInfo = {
-  id: string;
-  name: string;
-  email: string;
-  plaidAccessToken?: { content: string; iv: string; tag: string } | null;
-};
-
-const API_URL = process.env.REACT_APP_API_URL;
+import { fetchUserInfo, type UserInfo } from "../../api/auth";
+import {
+  createLinkToken as apiCreateLinkToken,
+  exchangePublicToken as apiExchangePublicToken,
+  fetchPlaidItems,
+  syncPlaidTransactions,
+  type PlaidItem,
+} from "../../api/plaid";
 
 export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boolean }) {
-  const token = useSelector((s: RootState) => s.auth.token);
+  // ✅ token can come from redux OR localStorage (signup flow often needs this)
+  const reduxToken = useSelector((s: RootState) => s.auth.token);
+  const token = reduxToken || localStorage.getItem("token") || null;
+
   const qc = useQueryClient();
 
   const [linkToken, setLinkToken] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
-  // ✅ Fetch current user info
-  const { data: userInfo } = useQuery<UserInfo>({
+  // ---------------- Queries ----------------
+  const { data: userInfo, isLoading: userLoading } = useQuery<UserInfo>({
     queryKey: ["userInfo"],
-    enabled: Boolean(token),
-    queryFn: async () => {
-      const { data } = await axios.get<UserInfo>(`${API_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return data;
+    enabled: !!token,
+    queryFn: () => fetchUserInfo(token!),
+  });
+
+  const banksConnected = (userInfo as any)?.banksConnected ?? 0;
+
+  const { data: items = [] } = useQuery<PlaidItem[]>({
+    queryKey: ["plaid", "items"],
+    enabled: !!token && banksConnected > 0,
+    queryFn: () => fetchPlaidItems(token!),
+    staleTime: 60_000,
+  });
+
+  const primaryBankName =
+    items.find((i) => i.isPrimary)?.institutionName ||
+    items[0]?.institutionName ||
+    null;
+
+  // ---------------- Mutations ----------------
+  const createLink = useMutation({
+    mutationFn: async (mode: "new" | "update", itemId?: string) => {
+      if (!token) throw new Error("Missing auth token");
+      const res = await apiCreateLinkToken(token, { mode, itemId });
+      return res.link_token;
+    },
+    onSuccess: (lt) => {
+      setLinkToken(lt);
+      setErrorMsg(null);
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.error || err?.message || "Failed to create link token");
     },
   });
 
-  const isLinked = Boolean(userInfo?.plaidAccessToken);
-
-  // ✅ Create link token (when not linked yet)
-  const createLinkToken = useMutation({
-    mutationFn: async () => {
-      const { data } = await axios.post<LinkTokenRes>(
-        `${API_URL}/plaid/link-token`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      return data.link_token;
-    },
-    onSuccess: (lt) => setLinkToken(lt),
-    onError: (err: any) =>
-      setErrorMsg(err?.response?.data?.error || "Failed to create link token"),
-  });
-
-  // ✅ Exchange public token for access token
-  const exchangePublicToken = useMutation({
-    mutationFn: async (public_token: string) => {
-      await axios.post(
-        `${API_URL}/plaid/exchange-public-token`,
-        { public_token },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+  const exchangeToken = useMutation({
+    mutationFn: async (args: {
+      publicToken: string;
+      institution?: { id?: string; name?: string };
+      makePrimary?: boolean;
+    }) => {
+      if (!token) throw new Error("Missing auth token");
+      await apiExchangePublicToken(token, args);
     },
     onSuccess: async () => {
       try {
@@ -68,84 +75,112 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
       } catch (e) {
         console.error("❌ Initial sync failed:", e);
       }
+
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["userInfo"] }),
+        qc.invalidateQueries({ queryKey: ["plaid", "items"] }),
         qc.invalidateQueries({ queryKey: ["accounts"] }),
         qc.invalidateQueries({ queryKey: ["transactions"] }),
         qc.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
       ]);
+
       window.dispatchEvent(new Event("plaid:linked"));
     },
-    onError: (err: any) =>
-      setErrorMsg(err?.response?.data?.error || "Failed to link account"),
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.error || err?.message || "Failed to link account");
+    },
   });
 
-  // Auto-create link token on mount
-  useEffect(() => {
-    if (token && !isLinked && !createLinkToken.isPending) {
-      createLinkToken.mutate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, isLinked]);
+  // ---------------- Plaid hook ----------------
+  const { open, ready } = usePlaidLink({
+    token: linkToken || "",
+    onSuccess: (publicToken, metadata) => {
+      exchangeToken.mutate({
+        publicToken,
+        institution: metadata?.institution
+          ? { id: metadata.institution.institution_id, name: metadata.institution.name }
+          : undefined,
+        makePrimary: banksConnected === 0 ? true : undefined,
+      });
+    },
+  });
 
-  // ✅ Hook into Plaid Link
-const { open, ready } = usePlaidLink({
-  token: linkToken || "",
-  onSuccess: (public_token, metadata) => {
-    console.log("✅ Got public_token:", public_token, metadata);
-    exchangePublicToken.mutate(public_token);
-  },
-});
-  // 🚨 Auto-open Plaid modal if requested
-  useEffect(() => {
-    if (autoOpen && ready && linkToken && !isLinked) {
-      open();
-    }
-  }, [autoOpen, ready, linkToken, isLinked, open]);
+  // ---------------- Effects (always declared) ----------------
 
-  // 🚫 Don’t render if no auth
+  // Auto-open for first connect
+  React.useEffect(() => {
+    if (!autoOpen) return;
+    if (!token) return;
+    if (banksConnected > 0) return;
+
+    // ensure link token exists
+    if (!linkToken && !createLink.isPending) {
+      createLink.mutate(["new", undefined] as any);
+      return;
+    }
+
+    if (linkToken && ready) open();
+  }, [autoOpen, token, banksConnected, linkToken, ready, open, createLink]);
+
+  // When linkToken flips and Plaid is ready, open
+  React.useEffect(() => {
+    if (!linkToken) return;
+    if (!ready) return;
+    open();
+  }, [linkToken, ready, open]);
+
+  // ---------------- Render ----------------
   if (!token) return null;
 
-  // ✅ Already linked → show status badge
-  if (isLinked) {
-    return (
-      <div className="inline-flex items-center gap-2">
-        <span className="px-3 py-1 rounded-full text-sm font-medium text-emerald-300 bg-emerald-400/10 ring-1 ring-emerald-400/20">
-          ✓ Bank connected
-        </span>
-      </div>
-    );
-  }
+  const busy = createLink.isPending || exchangeToken.isPending;
 
-  const disabled =
-    !ready ||
-    createLinkToken.isPending ||
-    exchangePublicToken.isPending ||
-    !linkToken;
+  const connectFirstBank = async () => {
+    setErrorMsg(null);
+    await createLink.mutateAsync(["new", undefined] as any);
+  };
 
-  // ✅ Connect button
+  const addAnotherBank = async () => {
+    setErrorMsg(null);
+    await createLink.mutateAsync(["new", undefined] as any);
+  };
+
   return (
     <div className="inline-flex flex-col items-start gap-2">
-      <button
-        type="button"
-        onClick={() => open()}
-        disabled={disabled}
-        className={`px-5 py-2.5 rounded-xl font-medium text-white transition
-                    backdrop-blur-md border border-white/10
-                    bg-white/10 hover:bg-white/15
-                    ${
-                      disabled
-                        ? "opacity-50 cursor-not-allowed"
-                        : "shadow-[0_0_12px_rgba(34,211,238,0.1)]"
-                    }`}
-      >
-        {createLinkToken.isPending
-          ? "Preparing…"
-          : exchangePublicToken.isPending
-          ? "Linking…"
-          : "Connect with Plaid"}
-      </button>
-      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
+      <div className="text-sm text-white/70">
+        {userLoading ? "Checking connection…" : `${banksConnected} bank${banksConnected === 1 ? "" : "s"} connected`}
+        {primaryBankName ? <span className="text-white/90"> • {primaryBankName}</span> : null}
+      </div>
+
+      {banksConnected === 0 ? (
+        <button
+          type="button"
+          onClick={connectFirstBank}
+          disabled={busy}
+          className="px-5 py-2.5 rounded-xl font-medium text-white transition
+                     backdrop-blur-md border border-white/10
+                     bg-white/10 hover:bg-white/15 disabled:opacity-50"
+        >
+          {busy ? "Preparing…" : "Connect your first bank"}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={addAnotherBank}
+          disabled={busy}
+          className="px-5 py-2.5 rounded-xl font-medium text-white transition
+                     backdrop-blur-md border border-white/10
+                     bg-white/10 hover:bg-white/15 disabled:opacity-50"
+        >
+          {busy ? "Preparing…" : "Add another bank"}
+        </button>
+      )}
+
+      {errorMsg && <p className="text-sm text-rose-300">{errorMsg}</p>}
+
+      {/* Optional: show why the button might feel “dead” */}
+      {banksConnected === 0 && !busy && linkToken && !ready && (
+        <p className="text-xs text-white/50">Loading Plaid…</p>
+      )}
     </div>
   );
 }

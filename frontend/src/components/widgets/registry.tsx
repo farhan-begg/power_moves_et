@@ -1,5 +1,4 @@
 // src/components/widgets/registry.ts
-import PlaidConnectWidget from "./PlaidConnectWidget";
 import StatTodayWidget from "./StatTodayWidget";
 import StatMonthWidget from "./StatMonthWidget";
 import StatYearWidget from "./StatYearWidget";

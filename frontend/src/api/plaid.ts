@@ -1,93 +1,149 @@
+// src/api/plaid.ts
 import { http, auth } from "./http";
 
 /* ========= Types ========= */
+
+export type PlaidItemStatus = "active" | "error" | "revoked";
+
+export interface PlaidItem {
+  itemId: string;
+  institutionId: string | null;
+  institutionName: string | null;
+  isPrimary: boolean;
+  status: PlaidItemStatus;
+  createdAt: string;
+}
+
 export interface PlaidAccount {
   accountId: string;
   name: string;
   officialName: string | null;
   mask: string | null;
-  type: string;       // "depository" | "credit" | "investment" | "loan" | "other"
+  type: string; // depository | credit | investment | loan | other
   subtype: string | null;
-  balances: {
-    available: number | null;
-    current: number | null;
-    isoCurrencyCode: string | null;
-  };
+
+  // ✅ backend returns balances: null in /accounts
+  balances: null;
 }
 
-export interface CardItem {
-  accountId: string;
-  name: string;
-  mask: string | null;
-  currentBalance: number | null;
-  isoCurrencyCode: string | null;
-  aprs: any;
-  lastPaymentAmount: number | null;
-  lastPaymentDate: string | null;
-  nextPaymentDueDate: string | null;
-}
+export type PlaidAccountsResponse = {
+  itemId: string;
+  source: "cache" | "plaid";
+  fetchedAt: string;
+  accounts: PlaidAccount[];
+};
 
 
 export type NetWorthResponse = {
-  summary: { assets: number; debts: number; netWorth: number };
-  manual: { cash: number; assets: number };
+  itemId: string;
+  institutionName?: string | null;
+  source?: string;
+  fetchedAt?: string | Date | null;
   currencyHint?: string;
-  breakdownByType?: Record<string, number>;
+  summary: { assets: number; debts: number; netWorth: number };
 };
 
+/* ========= Endpoints ========= */
 
-/* ========= Endpoints (arrays) ========= */
-
-// Transactions (synced from Plaid → your DB)
-export const fetchPlaidTransactions = async (token: string): Promise<any[]> => {
-  const { data } = await http.get("/plaid/transactions", auth(token));
-  return Array.isArray(data) ? data : (data?.transactions ?? []);
+// 0) List connected banks
+export const fetchPlaidItems = async (token: string): Promise<PlaidItem[]> => {
+  const { data } = await http.get<{ items: PlaidItem[] }>("/plaid/items", auth(token));
+  return data?.items ?? [];
 };
 
-// Create Link Token (POST)
-export const createLinkToken = async (token: string): Promise<{ link_token: string }> => {
-  const { data } = await http.post("/plaid/link-token", {}, auth(token));
+// 1) Create Link Token
+// mode="new" => add a new institution
+// mode="update" => re-auth an existing item (requires itemId)
+export const createLinkToken = async (
+  token: string,
+  opts?: { mode?: "new" | "update"; itemId?: string }
+): Promise<{ link_token: string }> => {
+  const payload =
+    opts?.mode === "update"
+      ? { mode: "update" as const, itemId: opts.itemId }
+      : { mode: "new" as const };
+
+  const { data } = await http.post("/plaid/link-token", payload, auth(token));
   return data;
 };
 
-// Exchange Public Token (POST)
-export const exchangePublicToken = async (token: string, publicToken: string): Promise<{ message: string }> => {
+// 2) Exchange Public Token (store as PlaidItem)
+// You should pass institution from Plaid Link onSuccess metadata
+export const exchangePublicToken = async (
+  token: string,
+  params: {
+    publicToken: string;
+    institution?: { id?: string; name?: string };
+    makePrimary?: boolean;
+  }
+): Promise<{ message: string; itemId: string; institutionName: string | null; isPrimary: boolean }> => {
   const { data } = await http.post(
     "/plaid/exchange-public-token",
-    { public_token: publicToken },
+    {
+      public_token: params.publicToken,
+      institution: params.institution ?? undefined,
+      makePrimary: params.makePrimary ?? undefined,
+    },
     auth(token)
   );
   return data;
 };
 
-// Accounts → return an array
-export const fetchPlaidAccounts = async (token: string): Promise<PlaidAccount[]> => {
-  const { data } = await http.get("/plaid/accounts", auth(token));
-  return Array.isArray(data) ? data : (data?.accounts ?? []);
-};
-
-// Cards → return an array
-export const fetchPlaidCards = async (token: string): Promise<CardItem[]> => {
-  const { data } = await http.get("/plaid/cards", auth(token));
-  return Array.isArray(data) ? data : (data?.cards ?? []);
-};
-
-// Net worth (keep object)
-export const fetchNetWorth = async (token: string): Promise<NetWorthResponse> => {
-  const { data } = await http.get<NetWorthResponse>("/plaid/net-worth", auth(token));
+// Set primary bank
+export const makePrimaryBank = async (
+  token: string,
+  itemId: string
+): Promise<{ message: string; itemId: string; institutionName: string | null }> => {
+  const { data } = await http.post(`/plaid/items/${itemId}/make-primary`, {}, auth(token));
   return data;
 };
 
-// Investments (keep shape from backend)
-export const fetchInvestments = async (token: string): Promise<{
-  holdings: any[];
-  securities: any[];
-  accounts: any[];
-}> => {
-  const { data } = await http.get("/plaid/investments", auth(token));
-  return data;
+// 3) Accounts (by bank itemId)
+// if itemId omitted, backend uses primary/last linked
+export const fetchPlaidAccounts = async (
+  token: string,
+  opts?: { itemId?: string; force?: boolean }
+): Promise<PlaidAccountsResponse> => {
+  const params = new URLSearchParams();
+  if (opts?.itemId) params.set("itemId", opts.itemId);
+  if (opts?.force) params.set("force", "true");
+
+  const url = `/plaid/accounts${params.toString() ? `?${params}` : ""}`;
+  const { data } = await http.get<PlaidAccountsResponse>(url, auth(token));
+
+  return {
+    itemId: data?.itemId ?? (opts?.itemId ?? ""),
+    source: data?.source ?? "cache",
+    fetchedAt: data?.fetchedAt ?? new Date().toISOString(),
+    accounts: data?.accounts ?? [],
+  };
 };
 
+// 3.5) Net worth
+// - all banks: itemId="__all__"
+// - single bank: itemId=<Plaid item_id>
+// - optional accountId ONLY when itemId is a real bank (not "__all__")
+export async function fetchNetWorth(
+  token: string,
+  opts?: { itemId?: string; accountId?: string; force?: boolean }
+): Promise<NetWorthResponse> {
+  const params: any = {};
+  if (opts?.itemId) params.itemId = opts.itemId;
+  if (opts?.accountId) params.accountId = opts.accountId;
+  if (opts?.force) params.force = "true";
+
+  const { data } = await http.get<NetWorthResponse>("/plaid/net-worth", {
+    ...auth(token),
+    params,
+  });
+
+  return data;
+}
+// Optional: Transactions sync you already have (leave it)
+export const fetchPlaidTransactions = async (token: string): Promise<any[]> => {
+  const { data } = await http.get("/plaid/transactions", auth(token));
+  return Array.isArray(data) ? data : (data?.transactions ?? []);
+};
 
 export async function syncPlaidTransactions(
   token: string,
@@ -98,8 +154,16 @@ export async function syncPlaidTransactions(
   if (opts?.accountIds?.length) params.set("accountIds", opts.accountIds.join(","));
 
   const url = `/plaid/transactions${params.toString() ? `?${params}` : ""}`;
-
   const { data } = await http.get(url, auth(token));
-  // your backend returns an array; normalize just in case
   return Array.isArray(data) ? data : (data?.transactions ?? []);
 }
+
+
+// ✅ Convenience: return ONLY the array (for old widgets)
+export const fetchPlaidAccountsArray = async (
+  token: string,
+  opts?: { itemId?: string; force?: boolean }
+): Promise<PlaidAccount[]> => {
+  const res = await fetchPlaidAccounts(token, opts);
+  return res.accounts ?? [];
+};

@@ -1,19 +1,24 @@
 // src/components/widgets/plaid/NetWorthWidget.tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/hooks";
 import { useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { fetchNetWorth } from "../../features/plaid/plaidSlice";
 import {
-  ArrowPathIcon, PlusIcon, TrashIcon, PencilSquareIcon, XMarkIcon, CheckIcon,
+  ArrowPathIcon,
+  PlusIcon,
+  TrashIcon,
+  PencilSquareIcon,
+  XMarkIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPlaidAccounts } from "../../api/plaid";
 import type { PlaidAccount } from "../../types/plaid";
 import { localYMD, formatMMDDYYYY } from "../../helpers/date";
+import { ALL_BANKS_ID, ALL_ACCOUNTS_ID } from "../../features/filters/globalAccountFilterSlice";
 
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-
 
 /* ---------- types ---------- */
 type ManualAsset = {
@@ -65,24 +70,46 @@ const money = (n: number, currency: string = "USD") => {
   }
 };
 
-// accept only real Plaid ids; anything else means "All"
+// ✅ accept only real Plaid ids; anything else means "All"
+// account selection is "__all_accounts__" now (NOT "__all__")
 const isRealAccountId = (v?: string | null) =>
-  !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
+  !!v &&
+  ![
+    ALL_ACCOUNTS_ID,
+    "__all_accounts__",
+    "__all__",
+    "all",
+    "undefined",
+    "null",
+    "",
+  ].includes(String(v));
 
 /* ---------- component ---------- */
 export default function NetWorthWidget({ className = "" }: { className?: string }) {
   const dispatch = useAppDispatch();
   const { netWorth, loading, error } = useAppSelector((s) => s.plaid);
 
-  // Global account filter
+  // Global bank + account filter
+  const selectedItemId = useSelector((s: RootState) => s.accountFilter.selectedItemId);
   const selectedAccountIdRaw = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
   const selectedAccountId = isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw! : undefined;
 
   const token = useSelector((s: RootState) => s.auth.token);
 
+  // ✅ Net worth params must match backend rules:
+  // - itemId="__all__" means all banks, and accountId is NOT allowed.
+  const nwItemId = useMemo(() => {
+    return selectedItemId && selectedItemId !== ALL_BANKS_ID ? selectedItemId : "__all__";
+  }, [selectedItemId]);
+
+  const nwAccountId = useMemo(() => {
+    if (nwItemId === "__all__") return undefined; // backend rejects accountId with __all__
+    return selectedAccountId;
+  }, [nwItemId, selectedAccountId]);
+
   // Accounts (for labels)
   const { data: accountsRaw } = useQuery<any>({
-    queryKey: ["accounts"],
+    queryKey: ["plaid", "accounts", selectedItemId],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
@@ -131,30 +158,27 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     if (netWorth) setLastNetWorth(netWorth);
   }, [netWorth]);
 
-  // refresh
+  // ✅ refresh respects bank + account rules
   const refresh = useCallback(() => {
     return dispatch(
-      fetchNetWorth(selectedAccountId ? { accountId: selectedAccountId } : undefined as any)
+      fetchNetWorth({
+        itemId: nwItemId,
+        ...(nwAccountId ? { accountId: nwAccountId } : {}),
+      }) as any
     );
-  }, [dispatch, selectedAccountId]);
+  }, [dispatch, nwItemId, nwAccountId]);
 
-  // also refresh whenever the global account filter changes
+  // ✅ single debounced refresh when bank/account selection changes
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId]);
-
-  useEffect(() => {
-  const t = window.setTimeout(() => {
-    refresh();
-  }, 250);
-
-  return () => window.clearTimeout(t);
-}, [selectedAccountId, refresh]);
+    const t = window.setTimeout(() => {
+      refresh();
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [refresh]);
 
   const loadAssets = useCallback(async () => {
     if (!jwt) return;
-    const res = await fetch(`${API_BASE}/manual-assets`,{ headers: authHeaders });
+    const res = await fetch(`${API_BASE}/manual-assets`, { headers: authHeaders });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     setAssets(data);
@@ -187,7 +211,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     amount: "",
     description: "",
     date: localYMD(new Date()),
-    destination: "current",               // NEW default
+    destination: "current", // NEW default
     manualAccountName: "",
     manualAccountCurrency: "USD",
   });
@@ -280,9 +304,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
         body.accountScope = "global";
       }
 
-      const url = editId
-        ? `${API_BASE}/manual-assets/${editId}`
-        : `${API_BASE}/manual-assets`;
+      const url = editId ? `${API_BASE}/manual-assets/${editId}` : `${API_BASE}/manual-assets`;
 
       const res = await fetch(url, {
         method: editId ? "PUT" : "POST",
@@ -349,10 +371,10 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
   const isInitialLoading = loading && !lastNetWorth;
   const isRefreshing = loading && !!lastNetWorth;
 
-  const currencyHint = show?.currencyHint || "USD";
-  const assetsSum = show?.summary.assets ?? 0;
-  const debts = show?.summary.debts ?? 0;
-  const net = show?.summary.netWorth ?? 0;
+  const currencyHint = (show as any)?.currencyHint || "USD";
+  const assetsSum = (show as any)?.summary?.assets ?? 0;
+  const debts = (show as any)?.summary?.debts ?? 0;
+  const net = (show as any)?.summary?.netWorth ?? 0;
   const netPositive = net >= 0;
 
   const base = Math.max(assetsSum + Math.abs(debts), 0);
@@ -376,7 +398,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
           </button>
         </div>
         <div className="mt-1 text-[11px] text-white/60">As of {formatMMDDYYYY(new Date())}</div>
-        <div className="mt-4 text-rose-300 text-sm">Failed to load: {error}</div>
+        <div className="mt-4 text-rose-300 text-sm">Failed to load: {String(error)}</div>
         <Btn onClick={refresh} className="mt-3">
           <ArrowPathIcon className="h-4 w-4" />
           Retry
@@ -400,7 +422,11 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
           <div className="text-[11px] text-white/60 mt-0.5">
             As of <span className="text-white">{formatMMDDYYYY(new Date())}</span>
           </div>
-          {selectedAccountId ? (
+
+          {/* ✅ label logic that matches backend rules */}
+          {nwItemId === "__all__" ? (
+            <div className="text-[11px] text-white/40 mt-0.5">All banks • All accounts</div>
+          ) : nwAccountId ? (
             <div className="text-[11px] text-white/60 mt-0.5">
               Account: <span className="text-white">{selectedAccountLabel}</span>
             </div>
@@ -582,9 +608,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
                     type="radio"
                     name="dest"
                     checked={txnForm.destination === "new-manual"}
-                    onChange={() =>
-                      setTxnForm((f) => ({ ...f, destination: "new-manual" }))
-                    }
+                    onChange={() => setTxnForm((f) => ({ ...f, destination: "new-manual" }))}
                   />
                   <span>Create a new manual account</span>
                 </label>
@@ -599,9 +623,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
                   <Input
                     placeholder="e.g., Cash Wallet, Side Hustle"
                     value={txnForm.manualAccountName || ""}
-                    onChange={(e) =>
-                      setTxnForm((f) => ({ ...f, manualAccountName: e.target.value }))
-                    }
+                    onChange={(e) => setTxnForm((f) => ({ ...f, manualAccountName: e.target.value }))}
                   />
                 </Field>
                 <Field>
@@ -623,7 +645,10 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
             {txnForm.destination === "new-manual" ? (
               <>A new manual account will be created and this entry will be linked to it.</>
             ) : selectedAccountId ? (
-              <>This entry will be linked to <span className="text-white">{selectedAccountLabel}</span>.</>
+              <>
+                This entry will be linked to{" "}
+                <span className="text-white">{selectedAccountLabel}</span>.
+              </>
             ) : (
               <>With “All accounts” selected, this entry won’t be tied to a specific account.</>
             )}
@@ -693,9 +718,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
                   setAssetForm((f) => ({
                     ...f,
                     value:
-                      f.value && isFinite(Number(f.value))
-                        ? Number(f.value).toFixed(2)
-                        : f.value,
+                      f.value && isFinite(Number(f.value)) ? Number(f.value).toFixed(2) : f.value,
                   }))
                 }
                 prefix="$"
@@ -997,6 +1020,7 @@ function ErrorText({ children }: { children: React.ReactNode }) {
 function Divider() {
   return <div className="my-3 h-px w-full bg-white/10" />;
 }
+
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { prefix?: string };
 function Input({ prefix, className = "", ...props }: InputProps) {
   const ariaInvalid = (props as any)["aria-invalid"];
@@ -1030,6 +1054,7 @@ function Input({ prefix, className = "", ...props }: InputProps) {
     />
   );
 }
+
 type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   error?: boolean | string;
   leftIcon?: React.ReactNode;
@@ -1099,6 +1124,7 @@ function Select({
     </div>
   );
 }
+
 type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 function Textarea({ className = "", ...props }: TextareaProps) {
   return (

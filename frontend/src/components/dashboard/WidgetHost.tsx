@@ -1,6 +1,5 @@
 // src/components/widgets/WidgetHost.tsx (or wherever this file lives)
 import React from "react";
-import PlaidConnectWidget from "../widgets/PlaidConnectWidget";
 import StatTodayWidget from "../widgets/StatTodayWidget";
 import StatMonthWidget from "../widgets/StatMonthWidget";
 import StatYearWidget from "../widgets/StatYearWidget";

@@ -1,3 +1,5 @@
+// backend/src/services/plaidBalances.ts
+import mongoose from "mongoose";
 import PlaidBalanceSnapshot from "../models/PlaidBalanceSnapshot";
 import { computeNetWorthFromAccounts } from "../utils/computeNetWorth";
 
@@ -8,24 +10,33 @@ export async function getCachedOrFetchBalances({
   userId,
   accessToken,
   itemId,
+  institutionId = null,
+  institutionName = null,
   force = false,
 }: {
   plaidClient: any;
   userId: string;
   accessToken: string;
   itemId: string;
+  institutionId?: string | null;
+  institutionName?: string | null;
   force?: boolean;
 }) {
-  const existing = await PlaidBalanceSnapshot.findOne({ userId, itemId });
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+
+  const existing = await PlaidBalanceSnapshot.findOne({
+    userId: userObjectId,
+    itemId,
+  });
 
   const isFresh =
     existing && Date.now() - new Date(existing.fetchedAt).getTime() < COOLDOWN_MS;
 
   if (existing && isFresh && !force) {
-    return { source: "cache", snapshot: existing };
+    return { source: "cache" as const, snapshot: existing };
   }
 
-  // Fetch from Plaid (THIS is what was rate-limiting you)
+  // Fetch from Plaid (rate-limited endpoint)
   const resp = await plaidClient.accountsBalanceGet({
     access_token: accessToken,
   });
@@ -35,10 +46,12 @@ export async function getCachedOrFetchBalances({
     computeNetWorthFromAccounts(accounts);
 
   const upsert = await PlaidBalanceSnapshot.findOneAndUpdate(
-    { userId, itemId },
+    { userId: userObjectId, itemId },
     {
-      userId,
+      userId: userObjectId,
       itemId,
+      institutionId,
+      institutionName,
       accounts,
       totalAssets,
       totalLiabilities,
@@ -48,5 +61,5 @@ export async function getCachedOrFetchBalances({
     { upsert: true, new: true }
   );
 
-  return { source: "plaid", snapshot: upsert };
+  return { source: "plaid" as const, snapshot: upsert };
 }

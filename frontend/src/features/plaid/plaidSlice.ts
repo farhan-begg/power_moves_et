@@ -8,11 +8,14 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
 });
 
+/** ✅ Match backend net-worth response */
 type NetWorthResponse = {
-  summary: { assets: number; debts: number; netWorth: number };
-  manual?: { cash: number; assets: number };
-  breakdownByType: Record<string, number>;
+  itemId: string; // "__all__" or actual Plaid itemId
+  source: "cache" | "plaid" | "cache-stale" | "multi";
+  fetchedAt: string | null;
   currencyHint?: string;
+  summary: { assets: number; debts: number; netWorth: number };
+  warning?: string;
 };
 
 type InvestmentsResponse = {
@@ -60,17 +63,25 @@ export const fetchInvestments = createAsyncThunk<InvestmentsResponse>(
   }
 );
 
+/**
+ * ✅ UPDATED:
+ * - itemId="__all__" => aggregate across all banks
+ * - accountId only valid when itemId is a real bank itemId (NOT "__all__")
+ */
 export const fetchNetWorth = createAsyncThunk(
   "plaid/netWorth",
-  async ({ accountId }: { accountId?: string } = {}) => {
+  async (
+    opts: { itemId?: string; accountId?: string; force?: boolean } = {}
+  ) => {
     const token = localStorage.getItem("token") ?? "";
     const url = new URL(`${API}/net-worth`);
 
-    if (
-      accountId &&
-      !["all", "__all__", "undefined", "null", ""].includes(String(accountId))
-    ) {
-      url.searchParams.set("accountId", accountId);
+    if (opts.itemId) url.searchParams.set("itemId", opts.itemId);
+    if (opts.force) url.searchParams.set("force", "true");
+
+    // only allow accountId when NOT aggregating all banks
+    if (opts.accountId && opts.itemId && opts.itemId !== "__all__") {
+      url.searchParams.set("accountId", opts.accountId);
     }
 
     const res = await fetch(url.toString(), {
@@ -78,7 +89,7 @@ export const fetchNetWorth = createAsyncThunk(
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to fetch net worth");
-    return json;
+    return json as NetWorthResponse;
   }
 );
 

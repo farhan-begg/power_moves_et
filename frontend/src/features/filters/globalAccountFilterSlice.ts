@@ -1,45 +1,49 @@
-// src/features/accountFilter/accountFilterSlice.ts
+// src/features/filters/globalAccountFilterSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-export const ALL_ACCOUNTS_ID = "__all__";
+export const ALL_ACCOUNTS_ID = "__all_accounts__";
+export const ALL_BANKS_ID = "__all__";
 
-export type AccountFilterState = {
-  /** Global single-select filter. "__all__" = all accounts */
+type State = {
+  selectedItemId: string;
+  selectedItemLabel: string;
   selectedAccountId: string;
-  /** Optional friendly label for the selected account (derived or stored) */
   selectedAccountLabel: string;
 };
 
-const initialState: AccountFilterState = {
+const initialState: State = {
+  selectedItemId: ALL_BANKS_ID,
+  selectedItemLabel: "All banks",
   selectedAccountId: ALL_ACCOUNTS_ID,
   selectedAccountLabel: "All accounts",
 };
 
-const accountFilterSlice = createSlice({
+const slice = createSlice({
   name: "accountFilter",
   initialState,
   reducers: {
-    /** New: set id + optional label together */
-    setSelectedAccount(
-      state,
-      action: PayloadAction<{ id: string; label?: string }>
-    ) {
-      const id = action.payload.id || ALL_ACCOUNTS_ID;
-      state.selectedAccountId = id;
-      state.selectedAccountLabel =
-        action.payload.label ??
-        (id === ALL_ACCOUNTS_ID ? "All accounts" : "Selected account");
+    setSelectedBank(state, action: PayloadAction<{ id: string; label: string }>) {
+      state.selectedItemId = action.payload.id;
+      state.selectedItemLabel = action.payload.label;
+      state.selectedAccountId = ALL_ACCOUNTS_ID;
+      state.selectedAccountLabel = "All accounts";
     },
 
-    /** Back-compat: only set the id (label will be derived/defaulted) */
+    setSelectedAccount(state, action: PayloadAction<{ id: string; label: string }>) {
+      state.selectedAccountId = action.payload.id;
+      state.selectedAccountLabel = action.payload.label;
+    },
+
+    // ✅ ADD THIS for backward-compat
     setSelectedAccountId(state, action: PayloadAction<string>) {
       const id = action.payload || ALL_ACCOUNTS_ID;
       state.selectedAccountId = id;
-      state.selectedAccountLabel =
-        id === ALL_ACCOUNTS_ID ? "All accounts" : "Selected account";
+      state.selectedAccountLabel = id === ALL_ACCOUNTS_ID ? "All accounts" : "Selected account";
     },
 
-    clearAccountFilter(state) {
+    resetAccountFilter(state) {
+      state.selectedItemId = ALL_BANKS_ID;
+      state.selectedItemLabel = "All banks";
       state.selectedAccountId = ALL_ACCOUNTS_ID;
       state.selectedAccountLabel = "All accounts";
     },
@@ -47,15 +51,10 @@ const accountFilterSlice = createSlice({
 });
 
 export const {
+  setSelectedBank,
   setSelectedAccount,
-  setSelectedAccountId,
-  clearAccountFilter,
-} = accountFilterSlice.actions;
+  setSelectedAccountId, // ✅ export it
+  resetAccountFilter,
+} = slice.actions;
 
-export default accountFilterSlice.reducer;
-
-// Optional selectors
-export const selectSelectedAccountId = (s: { accountFilter: AccountFilterState }) =>
-  s.accountFilter.selectedAccountId;
-export const selectSelectedAccountLabel = (s: { accountFilter: AccountFilterState }) =>
-  s.accountFilter.selectedAccountLabel;
+export default slice.reducer;

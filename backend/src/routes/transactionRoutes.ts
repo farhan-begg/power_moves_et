@@ -12,17 +12,48 @@ const router = Router();
    Helpers
 -------------------------------------------- */
 
-function parseAccountIds(q: { accountId?: string; accountIds?: string }) {
-  const BAD = new Set(["__all__", "all", "undefined", "null", ""]);
-  const single = q.accountId && !BAD.has(String(q.accountId));
-  const many = (q.accountIds || "")
+// ✅ Robust parsing: supports accountId, accountIds, accountIdsCsv,
+//    and filters out sentinels like "__all__", "all", "undefined", etc.
+function parseAccountIds(q: {
+  accountId?: string;
+  accountIds?: string;
+  accountIdsCsv?: string;
+}) {
+  const BAD = new Set([
+    "__all__",
+    "__all_accounts__",
+    "all",
+    "undefined",
+    "null",
+    "",
+  ]);
+
+  const norm = (v?: string) => {
+    if (!v) return "";
+    const s = String(v).trim();
+    if (!s) return "";
+    const lower = s.toLowerCase();
+    if (BAD.has(lower)) return "";
+    return s;
+  };
+
+  const single = norm(q.accountId);
+
+  const csvRaw = q.accountIds ?? q.accountIdsCsv ?? "";
+  const many = String(csvRaw)
     .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s && !BAD.has(s));
-  if (single && many.length) return Array.from(new Set([q.accountId!, ...many]));
-  if (single) return [q.accountId!];
-  if (many.length) return many;
-  return [];
+    .map((s) => norm(s))
+    .filter(Boolean);
+
+  return Array.from(new Set([single, ...many].filter(Boolean)));
+}
+
+// ✅ Apply account filter for BOTH accountId and legacy account_id
+function applyAccountFilter(match: any, ids: string[]) {
+  if (!ids.length) return;
+
+  const clause = ids.length === 1 ? ids[0] : { $in: ids };
+  match.$or = [{ accountId: clause }, { account_id: clause }];
 }
 
 function isManualAccountId(id?: string | null): id is string {
@@ -55,7 +86,10 @@ async function getOrCreateManualAccountByName(
 
   const existing = await ManualAccount.findOne({
     userId,
-    name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    name: {
+      $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+      $options: "i",
+    },
   });
 
   if (existing) {
@@ -81,59 +115,85 @@ async function getOrCreateManualAccountByName(
    Manual Accounts endpoints
 -------------------------------------------- */
 
-router.get("/manual-accounts", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = new mongoose.Types.ObjectId(String(req.user));
+router.get(
+  "/manual-accounts",
+  protect,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = new mongoose.Types.ObjectId(String(req.user));
 
-    const items = await ManualAccount.find({ userId })
-      .sort({ createdAt: -1 })
-      .lean<{
-        _id: Types.ObjectId;
-        name: string;
-        currency?: string;
-        createdAt: Date;
-        updatedAt: Date;
-      }[]>();
+      const items = await ManualAccount.find({ userId })
+        .sort({ createdAt: -1 })
+        .lean<{
+          _id: Types.ObjectId;
+          name: string;
+          currency?: string;
+          createdAt: Date;
+          updatedAt: Date;
+        }[]>();
 
-    const data = items.map((a) => ({
-      _id: a._id,
-      accountId: `manual:${String(a._id)}`,
-      name: a.name,
-      currency: a.currency || "USD",
-      createdAt: a.createdAt,
-      updatedAt: a.updatedAt,
-    }));
+      const data = items.map((a) => ({
+        _id: a._id,
+        accountId: `manual:${String(a._id)}`,
+        name: a.name,
+        currency: a.currency || "USD",
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      }));
 
-    res.json(data);
-  } catch (err: any) {
-    console.error("❌ GET /manual-accounts error:", err?.message || err);
-    res.status(500).json({ error: "Failed to list manual accounts", details: err?.message || err });
-  }
-});
-
-router.post("/manual-accounts", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = new mongoose.Types.ObjectId(String(req.user));
-    const { name, currency = "USD" } = req.body as { name?: string; currency?: string };
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: "name is required" });
+      res.json(data);
+    } catch (err: any) {
+      console.error("❌ GET /manual-accounts error:", err?.message || err);
+      res
+        .status(500)
+        .json({
+          error: "Failed to list manual accounts",
+          details: err?.message || err,
+        });
     }
-
-    const created = await ManualAccount.create({ userId, name: name.trim(), currency });
-
-    res.status(201).json({
-      _id: created._id,
-      accountId: `manual:${String(created._id)}`,
-      name: created.name,
-      currency: created.currency || "USD",
-      createdAt: created.createdAt,
-      updatedAt: created.updatedAt,
-    });
-  } catch (err: any) {
-    console.error("❌ POST /manual-accounts error:", err?.message || err);
-    res.status(500).json({ error: "Failed to create manual account", details: err?.message || err });
   }
-});
+);
+
+router.post(
+  "/manual-accounts",
+  protect,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = new mongoose.Types.ObjectId(String(req.user));
+      const { name, currency = "USD" } = req.body as {
+        name?: string;
+        currency?: string;
+      };
+
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: "name is required" });
+      }
+
+      const created = await ManualAccount.create({
+        userId,
+        name: name.trim(),
+        currency,
+      });
+
+      res.status(201).json({
+        _id: created._id,
+        accountId: `manual:${String(created._id)}`,
+        name: created.name,
+        currency: created.currency || "USD",
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+      });
+    } catch (err: any) {
+      console.error("❌ POST /manual-accounts error:", err?.message || err);
+      res
+        .status(500)
+        .json({
+          error: "Failed to create manual account",
+          details: err?.message || err,
+        });
+    }
+  }
+);
 
 /* --------------------------------------------
    Transactions CRUD
@@ -143,8 +203,15 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
   try {
     const userId = new mongoose.Types.ObjectId(String(req.user));
     const {
-      type, amount, description, date, source,
-      categoryId, category, accountId, accountName,
+      type,
+      amount,
+      description,
+      date,
+      source,
+      categoryId,
+      category,
+      accountId,
+      accountName,
     } = req.body as {
       type: "income" | "expense";
       amount: number;
@@ -171,11 +238,17 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
       finalCategoryId = cat._id;
       finalCategoryName = cat.name;
     } else if (finalCategoryName) {
-      const existing = await Category.findOne({ userId, name: finalCategoryName });
+      const existing = await Category.findOne({
+        userId,
+        name: finalCategoryName,
+      });
       if (existing) {
         finalCategoryId = existing._id;
       } else {
-        const created = await Category.create({ userId, name: finalCategoryName });
+        const created = await Category.create({
+          userId,
+          name: finalCategoryName,
+        });
         finalCategoryId = created._id;
       }
     }
@@ -196,25 +269,35 @@ router.post("/", protect, async (req: AuthRequest, res: Response) => {
     res.json(doc);
   } catch (err: any) {
     console.error("❌ Error saving transaction:", err?.message || err);
-    res.status(500).json({ error: "Error saving transaction", details: err?.message || err });
+    res
+      .status(500)
+      .json({ error: "Error saving transaction", details: err?.message || err });
   }
 });
 
 router.get("/", protect, async (req: AuthRequest, res: Response) => {
   try {
     const {
-      type, category, source,
-      startDate, endDate,
-      minAmount, maxAmount,
-      sortBy, order,
-      page, limit,
-      accountId, accountIds,
+      type,
+      category,
+      source,
+      startDate,
+      endDate, // EXCLUSIVE
+      minAmount,
+      maxAmount,
+      sortBy,
+      order,
+      page,
+      limit,
+      accountId,
+      accountIds,
+      accountIdsCsv, // ✅ alias
     } = req.query as {
       type?: string;
       category?: string;
       source?: "manual" | "plaid";
       startDate?: string;
-      endDate?: string;           // EXCLUSIVE
+      endDate?: string;
       minAmount?: string;
       maxAmount?: string;
       sortBy?: string;
@@ -223,6 +306,7 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
       limit?: string;
       accountId?: string;
       accountIds?: string;
+      accountIdsCsv?: string;
     };
 
     const userId = new mongoose.Types.ObjectId(String(req.user));
@@ -234,21 +318,19 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
 
     const min = minAmount != null ? Number(minAmount) : undefined;
     const max = maxAmount != null ? Number(maxAmount) : undefined;
-    if (Number.isFinite(min)) filter.amount = { ...(filter.amount || {}), $gte: min };
-    if (Number.isFinite(max)) filter.amount = { ...(filter.amount || {}), $lte: max };
+    if (Number.isFinite(min))
+      filter.amount = { ...(filter.amount || {}), $gte: min };
+    if (Number.isFinite(max))
+      filter.amount = { ...(filter.amount || {}), $lte: max };
 
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(String(startDate));
-      if (endDate)  filter.date.$lt  = new Date(String(endDate));
+      if (endDate) filter.date.$lt = new Date(String(endDate)); // EXCLUSIVE
     }
 
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) {
-      filter.$or = [{ accountId: ids[0] }, { account_id: ids[0] }];
-    } else if (ids.length > 1) {
-      filter.$or = [{ accountId: { $in: ids } }, { account_id: { $in: ids } }];
-    }
+    const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+    applyAccountFilter(filter, ids);
 
     const sortField = (sortBy as string) || "date";
     const sortOrder = order === "asc" ? 1 : -1;
@@ -257,6 +339,7 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
     const skip = (pageNum - 1) * limitNum;
 
     console.log("GET /api/transactions raw query:", req.query);
+    console.log("GET /api/transactions parsed ids:", ids);
     console.log("GET /api/transactions Mongo filter:", JSON.stringify(filter));
 
     const [total, transactions] = await Promise.all([
@@ -265,7 +348,7 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limitNum)
-        .lean()
+        .lean(),
     ]);
 
     res.json({
@@ -276,7 +359,9 @@ router.get("/", protect, async (req: AuthRequest, res: Response) => {
     });
   } catch (err: any) {
     console.error("❌ Error fetching transactions:", err?.message || err);
-    res.status(500).json({ error: "Error fetching transactions", details: err?.message || err });
+    res
+      .status(500)
+      .json({ error: "Error fetching transactions", details: err?.message || err });
   }
 });
 
@@ -310,6 +395,7 @@ router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
     const update: Record<string, any> = {};
 
     if (type) update.type = type;
+
     if (amount !== undefined) {
       const n = typeof amount === "string" ? Number(amount) : amount;
       if (!Number.isFinite(n as number)) {
@@ -317,9 +403,11 @@ router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
       }
       update.amount = n;
     }
+
     if (description !== undefined) update.description = description?.trim();
     if (date) update.date = new Date(date);
 
+    // Category updates
     if (categoryId !== undefined) {
       if (!categoryId) {
         return res.status(400).json({ error: "categoryId cannot be empty" });
@@ -327,26 +415,28 @@ router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
       if (!mongoose.isValidObjectId(String(categoryId))) {
         return res.status(400).json({ error: "Invalid categoryId" });
       }
+
       const cat = await Category.findOne({
         _id: new mongoose.Types.ObjectId(String(categoryId)),
         userId,
       });
+
       if (!cat) return res.status(404).json({ error: "Category not found" });
 
       update.categoryId = cat._id;
-      update.category   = cat.name;
+      update.category = cat.name;
     } else if (category !== undefined) {
       const name = (category || "").trim();
       if (!name) return res.status(400).json({ error: "category cannot be empty" });
 
       let cat = await Category.findOne({ userId, name });
-      if (!cat) {
-        cat = await Category.create({ userId, name });
-      }
+      if (!cat) cat = await Category.create({ userId, name });
+
       update.categoryId = cat._id;
-      update.category   = cat.name;
+      update.category = cat.name;
     }
 
+    // Account updates
     if (accountId !== undefined) {
       if (accountId === null || accountId === "") {
         update.accountId = undefined;
@@ -388,6 +478,7 @@ router.put("/:id", protect, async (req: AuthRequest, res: Response) => {
         .status(404)
         .json({ error: "Transaction not found or not authorized" });
     }
+
     res.json(txn);
   } catch (err: any) {
     console.error("❌ Error updating transaction:", err?.message || err);
@@ -403,34 +494,45 @@ router.delete("/:id", protect, async (req: AuthRequest, res: Response) => {
       _id: req.params.id,
       userId: new mongoose.Types.ObjectId(String(req.user)),
     });
-    if (!txn) return res.status(404).json({ error: "Transaction not found or not authorized" });
+    if (!txn)
+      return res
+        .status(404)
+        .json({ error: "Transaction not found or not authorized" });
+
     res.json({ message: "Transaction deleted successfully", id: txn._id });
   } catch (err: any) {
     console.error("❌ Error deleting transaction:", err?.message || err);
-    res.status(500).json({ error: "Error deleting transaction", details: err?.message || err });
+    res
+      .status(500)
+      .json({ error: "Error deleting transaction", details: err?.message || err });
   }
 });
 
+/* --------------------------------------------
+   Aggregates
+-------------------------------------------- */
+
 router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
   try {
-    const { startDate, endDate, accountId, accountIds } = req.query as {
-      startDate?: string;
-      endDate?: string;
-      accountId?: string;
-      accountIds?: string;
-    };
+    const { startDate, endDate, accountId, accountIds, accountIdsCsv } =
+      req.query as {
+        startDate?: string;
+        endDate?: string; // EXCLUSIVE
+        accountId?: string;
+        accountIds?: string;
+        accountIdsCsv?: string;
+      };
 
     const match: any = { userId: new mongoose.Types.ObjectId(String(req.user)) };
 
     if (startDate || endDate) {
       match.date = {};
       if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate)); // EXCLUSIVE
+      if (endDate) match.date.$lt = new Date(String(endDate)); // EXCLUSIVE
     }
 
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) match.accountId = ids[0];
-    else if (ids.length > 1) match.accountId = { $in: ids };
+    const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+    applyAccountFilter(match, ids);
 
     const stats = await Transaction.aggregate([
       { $match: match },
@@ -444,15 +546,29 @@ router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
       {
         $group: {
           _id: "$_id.category",
-          totals: { $push: { type: "$_id.type", totalAmount: "$totalAmount", count: "$count" } },
+          totals: {
+            $push: {
+              type: "$_id.type",
+              totalAmount: "$totalAmount",
+              count: "$count",
+            },
+          },
         },
       },
       { $sort: { _id: 1 } },
     ]);
 
     const formatted = stats.map((stat) => {
-      const income  = stat.totals.find((t: any) => t.type === "income")  || { totalAmount: 0, count: 0 };
-      const expense = stat.totals.find((t: any) => t.type === "expense") || { totalAmount: 0, count: 0 };
+      const income =
+        stat.totals.find((t: any) => t.type === "income") || {
+          totalAmount: 0,
+          count: 0,
+        };
+      const expense =
+        stat.totals.find((t: any) => t.type === "expense") || {
+          totalAmount: 0,
+          count: 0,
+        };
       return {
         category: stat._id,
         income: income.totalAmount,
@@ -465,19 +581,23 @@ router.get("/stats", protect, async (req: AuthRequest, res: Response) => {
     res.json(formatted);
   } catch (err: any) {
     console.error("❌ Error fetching stats:", err?.message || err);
-    res.status(500).json({ error: "Error fetching transaction stats", details: err?.message });
+    res
+      .status(500)
+      .json({ error: "Error fetching transaction stats", details: err?.message });
   }
 });
 
 router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
   try {
-    const { granularity = "month", startDate, endDate, accountId, accountIds } = req.query as {
-      granularity?: "day" | "month" | "year";
-      startDate?: string;
-      endDate?: string;
-      accountId?: string;
-      accountIds?: string;
-    };
+    const { granularity = "month", startDate, endDate, accountId, accountIds, accountIdsCsv } =
+      req.query as {
+        granularity?: "day" | "month" | "year";
+        startDate?: string;
+        endDate?: string; // EXCLUSIVE
+        accountId?: string;
+        accountIds?: string;
+        accountIdsCsv?: string;
+      };
 
     const userId = new mongoose.Types.ObjectId(String(req.user));
     const match: Record<string, any> = { userId };
@@ -485,27 +605,41 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
     if (startDate || endDate) {
       match.date = {};
       if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate));
+      if (endDate) match.date.$lt = new Date(String(endDate)); // EXCLUSIVE
     }
 
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) match.accountId = ids[0];
-    else if (ids.length > 1) match.accountId = { $in: ids };
+    const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+    applyAccountFilter(match, ids);
+
+    // ✅ Debug that will tell you instantly why "All vs Selected" returns empty
+    console.log("SUMMARY raw query:", req.query);
+    console.log("SUMMARY parsed ids:", ids);
+    console.log("SUMMARY match:", JSON.stringify(match));
 
     const formatMap: Record<"day" | "month" | "year", string> = {
       day: "%Y-%m-%d",
       month: "%Y-%m",
       year: "%Y",
     };
-    const format = formatMap[(granularity as "day" | "month" | "year") ?? "month"];
+    const fmt = formatMap[(granularity as "day" | "month" | "year") ?? "month"];
 
     const pipeline: PipelineStage[] = [
       { $match: match },
       {
         $group: {
-          _id: { $dateToString: { format, date: "$date" } },
-          income:  { $sum: { $cond: [{ $eq: ["$type", "income"]  }, "$amount", 0] } },
-          expense: { $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] } },
+          _id: {
+            $dateToString: {
+              format: fmt,
+              date: "$date",
+              timezone: "UTC", // ✅ consistent bucketing
+            },
+          },
+          income: {
+            $sum: { $cond: [{ $eq: ["$type", "income"] }, "$amount", 0] },
+          },
+          expense: {
+            $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] },
+          },
         },
       },
       {
@@ -524,7 +658,10 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
     res.json({ granularity, data });
   } catch (err: any) {
     console.error("❌ Summary error:", err?.message || err);
-    res.status(500).json({ error: "Failed to fetch summary", details: err?.message || err });
+    res.status(500).json({
+      error: "Failed to fetch summary",
+      details: err?.message || err,
+    });
   }
 });
 
@@ -532,195 +669,235 @@ router.get("/summary", protect, async (req: AuthRequest, res: Response) => {
    🔥 INSIGHTS (kept in this routes file)
 -------------------------------------------- */
 
-// GET /api/transactions/insights/top-categories?startDate&endDate&accountId&accountIds&limit=5
-router.get("/insights/top-categories", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const { startDate, endDate, accountId, accountIds, limit } = req.query as {
-      startDate?: string;
-      endDate?: string; // EXCLUSIVE
-      accountId?: string;
-      accountIds?: string;
-      limit?: string;
-    };
+router.get(
+  "/insights/top-categories",
+  protect,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { startDate, endDate, accountId, accountIds, accountIdsCsv, limit } =
+        req.query as {
+          startDate?: string;
+          endDate?: string; // EXCLUSIVE
+          accountId?: string;
+          accountIds?: string;
+          accountIdsCsv?: string;
+          limit?: string;
+        };
 
-    const match: any = { userId: new mongoose.Types.ObjectId(String(req.user)), type: "expense" };
+      const match: any = {
+        userId: new mongoose.Types.ObjectId(String(req.user)),
+        type: "expense",
+      };
 
-    if (startDate || endDate) {
-      match.date = {};
-      if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate));
-    }
+      if (startDate || endDate) {
+        match.date = {};
+        if (startDate) match.date.$gte = new Date(String(startDate));
+        if (endDate) match.date.$lt = new Date(String(endDate)); // EXCLUSIVE
+      }
 
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) match.accountId = ids[0];
-    else if (ids.length > 1) match.accountId = { $in: ids };
+      const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+      applyAccountFilter(match, ids);
 
-    const lim = Math.max(1, Math.min(20, Number(limit) || 5));
+      const lim = Math.max(1, Math.min(20, Number(limit) || 5));
 
-    // Sum absolute spend per category to be sign-agnostic
-    const rows = await Transaction.aggregate([
-      { $match: match },
-      {
-        $project: {
-          category: { $ifNull: ["$category", "Uncategorized"] },
-          spendAbs: { $abs: "$amount" },
-        },
-      },
-      { $group: { _id: "$category", spend: { $sum: "$spendAbs" }, count: { $sum: 1 } } },
-      { $sort: { spend: -1 } },
-      { $limit: lim },
-    ]);
-
-    res.json({ rows: rows.map(r => ({ category: r._id, spend: r.spend, count: r.count })) });
-  } catch (err: any) {
-    console.error("❌ insights/top-categories error:", err?.message || err);
-    res.status(500).json({ error: "Failed to get top categories", details: err?.message || err });
-  }
-});
-
-// GET /api/transactions/insights/top-merchants?startDate&endDate&accountId&accountIds&limit=5
-// We don't assume a 'merchant' field exists; we use description as the payee/merchant name.
-router.get("/insights/top-merchants", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const { startDate, endDate, accountId, accountIds, limit } = req.query as {
-      startDate?: string;
-      endDate?: string; // EXCLUSIVE
-      accountId?: string;
-      accountIds?: string;
-      limit?: string;
-    };
-
-    const match: any = { userId: new mongoose.Types.ObjectId(String(req.user)), type: "expense" };
-
-    if (startDate || endDate) {
-      match.date = {};
-      if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate));
-    }
-
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) match.accountId = ids[0];
-    else if (ids.length > 1) match.accountId = { $in: ids };
-
-    const lim = Math.max(1, Math.min(20, Number(limit) || 5));
-
-    const rows = await Transaction.aggregate([
-      { $match: match },
-      {
-        $project: {
-          merchant: { $ifNull: ["$description", "Unknown"] },
-          spendAbs: { $abs: "$amount" },
-        },
-      },
-      { $group: { _id: "$merchant", spend: { $sum: "$spendAbs" }, count: { $sum: 1 } } },
-      { $sort: { spend: -1 } },
-      { $limit: lim },
-    ]);
-
-    res.json({ rows: rows.map(r => ({ merchant: r._id, spend: r.spend, count: r.count })) });
-  } catch (err: any) {
-    console.error("❌ insights/top-merchants error:", err?.message || err);
-    res.status(500).json({ error: "Failed to get top merchants", details: err?.message || err });
-  }
-});
-
-// GET /api/transactions/insights/largest?startDate&endDate&accountId&accountIds&limit=5
-router.get("/insights/largest", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const { startDate, endDate, accountId, accountIds, limit } = req.query as {
-      startDate?: string;
-      endDate?: string;
-      accountId?: string;
-      accountIds?: string;
-      limit?: string;
-    };
-
-    const match: any = { userId: new mongoose.Types.ObjectId(String(req.user)), type: "expense" };
-
-    if (startDate || endDate) {
-      match.date = {};
-      if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate));
-    }
-
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) match.accountId = ids[0];
-    else if (ids.length > 1) match.accountId = { $in: ids };
-
-    const lim = Math.max(1, Math.min(50, Number(limit) || 5));
-
-    // Sort by absolute amount descending so it works regardless of sign convention
-    const rows = await Transaction.aggregate([
-      { $match: match },
-      { $addFields: { amountAbs: { $abs: "$amount" } } },
-      { $sort: { amountAbs: -1 } },
-      {
-        $project: {
-          _id: 0,
-          date: "$date",
-          amount: "$amountAbs",
-          merchant: { $ifNull: ["$description", "Unknown"] },
-          category: { $ifNull: ["$category", "Uncategorized"] },
-        },
-      },
-      { $limit: lim },
-    ]);
-
-    res.json({ rows });
-  } catch (err: any) {
-    console.error("❌ insights/largest error:", err?.message || err);
-    res.status(500).json({ error: "Failed to get largest purchases", details: err?.message || err });
-  }
-});
-
-// GET /api/transactions/insights/burn-rate?startDate&endDate&accountId&accountIds
-// Average daily expense and simple 30-day projection (sign-agnostic via abs()).
-router.get("/insights/burn-rate", protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const { startDate, endDate, accountId, accountIds } = req.query as {
-      startDate?: string;
-      endDate?: string;
-      accountId?: string;
-      accountIds?: string;
-    };
-
-    const match: any = { userId: new mongoose.Types.ObjectId(String(req.user)), type: "expense" };
-
-    if (startDate || endDate) {
-      match.date = {};
-      if (startDate) match.date.$gte = new Date(String(startDate));
-      if (endDate)  match.date.$lt  = new Date(String(endDate));
-    }
-
-    const ids = parseAccountIds({ accountId, accountIds });
-    if (ids.length === 1) match.accountId = ids[0];
-    else if (ids.length > 1) match.accountId = { $in: ids };
-
-    const perDay = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: {
-            y: { $year: "$date" },
-            m: { $month: "$date" },
-            d: { $dayOfMonth: "$date" },
+      const rows = await Transaction.aggregate([
+        { $match: match },
+        {
+          $project: {
+            category: { $ifNull: ["$category", "Uncategorized"] },
+            spendAbs: { $abs: "$amount" },
           },
-          spend: { $sum: { $abs: "$amount" } },
         },
-      },
-      { $project: { _id: 0, y: "$_id.y", m: "$_id.m", d: "$_id.d", spend: 1 } },
-    ]);
+        { $group: { _id: "$category", spend: { $sum: "$spendAbs" }, count: { $sum: 1 } } },
+        { $sort: { spend: -1 } },
+        { $limit: lim },
+      ]);
 
-    const total = perDay.reduce((s, r) => s + (r.spend || 0), 0);
-    const days = perDay.length || 1;
-    const avgDaily = total / days;
-    const projectedMonthly = avgDaily * 30;
-
-    res.json({ avgDaily, projectedMonthly, daysCounted: days, total });
-  } catch (err: any) {
-    console.error("❌ insights/burn-rate error:", err?.message || err);
-    res.status(500).json({ error: "Failed to compute burn rate", details: err?.message || err });
+      res.json({
+        rows: rows.map((r) => ({ category: r._id, spend: r.spend, count: r.count })),
+      });
+    } catch (err: any) {
+      console.error("❌ insights/top-categories error:", err?.message || err);
+      res.status(500).json({
+        error: "Failed to get top categories",
+        details: err?.message || err,
+      });
+    }
   }
-});
+);
+
+router.get(
+  "/insights/top-merchants",
+  protect,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { startDate, endDate, accountId, accountIds, accountIdsCsv, limit } =
+        req.query as {
+          startDate?: string;
+          endDate?: string; // EXCLUSIVE
+          accountId?: string;
+          accountIds?: string;
+          accountIdsCsv?: string;
+          limit?: string;
+        };
+
+      const match: any = {
+        userId: new mongoose.Types.ObjectId(String(req.user)),
+        type: "expense",
+      };
+
+      if (startDate || endDate) {
+        match.date = {};
+        if (startDate) match.date.$gte = new Date(String(startDate));
+        if (endDate) match.date.$lt = new Date(String(endDate)); // EXCLUSIVE
+      }
+
+      const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+      applyAccountFilter(match, ids);
+
+      const lim = Math.max(1, Math.min(20, Number(limit) || 5));
+
+      const rows = await Transaction.aggregate([
+        { $match: match },
+        {
+          $project: {
+            merchant: { $ifNull: ["$description", "Unknown"] },
+            spendAbs: { $abs: "$amount" },
+          },
+        },
+        { $group: { _id: "$merchant", spend: { $sum: "$spendAbs" }, count: { $sum: 1 } } },
+        { $sort: { spend: -1 } },
+        { $limit: lim },
+      ]);
+
+      res.json({
+        rows: rows.map((r) => ({ merchant: r._id, spend: r.spend, count: r.count })),
+      });
+    } catch (err: any) {
+      console.error("❌ insights/top-merchants error:", err?.message || err);
+      res.status(500).json({
+        error: "Failed to get top merchants",
+        details: err?.message || err,
+      });
+    }
+  }
+);
+
+router.get(
+  "/insights/largest",
+  protect,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { startDate, endDate, accountId, accountIds, accountIdsCsv, limit } =
+        req.query as {
+          startDate?: string;
+          endDate?: string; // EXCLUSIVE
+          accountId?: string;
+          accountIds?: string;
+          accountIdsCsv?: string;
+          limit?: string;
+        };
+
+      const match: any = {
+        userId: new mongoose.Types.ObjectId(String(req.user)),
+        type: "expense",
+      };
+
+      if (startDate || endDate) {
+        match.date = {};
+        if (startDate) match.date.$gte = new Date(String(startDate));
+        if (endDate) match.date.$lt = new Date(String(endDate)); // EXCLUSIVE
+      }
+
+      const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+      applyAccountFilter(match, ids);
+
+      const lim = Math.max(1, Math.min(50, Number(limit) || 5));
+
+      const rows = await Transaction.aggregate([
+        { $match: match },
+        { $addFields: { amountAbs: { $abs: "$amount" } } },
+        { $sort: { amountAbs: -1 } },
+        {
+          $project: {
+            _id: 0,
+            date: "$date",
+            amount: "$amountAbs",
+            merchant: { $ifNull: ["$description", "Unknown"] },
+            category: { $ifNull: ["$category", "Uncategorized"] },
+          },
+        },
+        { $limit: lim },
+      ]);
+
+      res.json({ rows });
+    } catch (err: any) {
+      console.error("❌ insights/largest error:", err?.message || err);
+      res.status(500).json({
+        error: "Failed to get largest purchases",
+        details: err?.message || err,
+      });
+    }
+  }
+);
+
+router.get(
+  "/insights/burn-rate",
+  protect,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { startDate, endDate, accountId, accountIds, accountIdsCsv } =
+        req.query as {
+          startDate?: string;
+          endDate?: string; // EXCLUSIVE
+          accountId?: string;
+          accountIds?: string;
+          accountIdsCsv?: string;
+        };
+
+      const match: any = {
+        userId: new mongoose.Types.ObjectId(String(req.user)),
+        type: "expense",
+      };
+
+      if (startDate || endDate) {
+        match.date = {};
+        if (startDate) match.date.$gte = new Date(String(startDate));
+        if (endDate) match.date.$lt = new Date(String(endDate)); // EXCLUSIVE
+      }
+
+      const ids = parseAccountIds({ accountId, accountIds, accountIdsCsv });
+      applyAccountFilter(match, ids);
+
+      const perDay = await Transaction.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: {
+              y: { $year: { date: "$date", timezone: "UTC" } },
+              m: { $month: { date: "$date", timezone: "UTC" } },
+              d: { $dayOfMonth: { date: "$date", timezone: "UTC" } },
+            },
+            spend: { $sum: { $abs: "$amount" } },
+          },
+        },
+        { $project: { _id: 0, y: "$_id.y", m: "$_id.m", d: "$_id.d", spend: 1 } },
+      ]);
+
+      const total = perDay.reduce((s, r) => s + (r.spend || 0), 0);
+      const days = perDay.length || 1;
+      const avgDaily = total / days;
+      const projectedMonthly = avgDaily * 30;
+
+      res.json({ avgDaily, projectedMonthly, daysCounted: days, total });
+    } catch (err: any) {
+      console.error("❌ insights/burn-rate error:", err?.message || err);
+      res.status(500).json({
+        error: "Failed to compute burn rate",
+        details: err?.message || err,
+      });
+    }
+  }
+);
 
 export default router;

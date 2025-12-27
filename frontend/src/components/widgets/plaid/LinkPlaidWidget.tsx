@@ -1,4 +1,4 @@
-// src/components/PlaidLinkButton.tsx
+// src/components/widgets/plaid/PlaidLinkButton.tsx
 import React from "react";
 import { usePlaidLink } from "react-plaid-link";
 import { useSelector } from "react-redux";
@@ -9,7 +9,7 @@ import {
   createLinkToken,
   exchangePublicToken,
 } from "../../../api/plaid";
-import { http, auth } from "../../../api/http"; // still used for /auth/me
+import { http, auth } from "../../../api/http";
 
 type UserInfo = {
   id: string;
@@ -18,7 +18,7 @@ type UserInfo = {
   plaidAccessToken?: { content: string; iv: string; tag: string } | null;
 };
 
-export default function PlaidLinkButton() {
+export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boolean }) {
   const token = useSelector((s: RootState) => s.auth.token);
   const qc = useQueryClient();
 
@@ -41,27 +41,32 @@ export default function PlaidLinkButton() {
   const createLink = useMutation({
     mutationFn: async () => {
       if (!token) throw new Error("Missing auth token");
-      const data = await createLinkToken(token);
+      const data = await createLinkToken(token, { mode: "new" }); // or omit opts
       return data.link_token;
     },
     onSuccess: (lt) => {
-      console.log("✅ Link token created:", lt);
       setLinkToken(lt);
     },
     onError: (err: any) => {
-      console.error("❌ Link token error:", err);
       setErrorMsg(err?.response?.data?.error || "Failed to create link token");
     },
   });
 
-  // ✅ Exchange public token
+  // ✅ Exchange public token (NEW SIGNATURE)
   const exchangeToken = useMutation({
-    mutationFn: async (publicToken: string) => {
+    mutationFn: async (args: {
+      publicToken: string;
+      institution?: { id?: string; name?: string };
+      makePrimary?: boolean;
+    }) => {
       if (!token) throw new Error("Missing auth token");
-      await exchangePublicToken(token, publicToken);
+      await exchangePublicToken(token, {
+        publicToken: args.publicToken,
+        institution: args.institution,
+        makePrimary: args.makePrimary,
+      });
     },
     onSuccess: async () => {
-      console.log("✅ Public token exchanged. Running initial sync...");
       try {
         if (token) await syncPlaidTransactions(token);
       } catch (e) {
@@ -71,14 +76,15 @@ export default function PlaidLinkButton() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["userInfo"] }),
         qc.invalidateQueries({ queryKey: ["accounts"] }),
+        qc.invalidateQueries({ queryKey: ["plaid", "accounts"] }),
         qc.invalidateQueries({ queryKey: ["transactions"] }),
         qc.invalidateQueries({ queryKey: ["plaid", "net-worth"] }),
+        qc.invalidateQueries({ queryKey: ["plaid", "items"] }),
       ]);
 
       window.dispatchEvent(new Event("plaid:linked"));
     },
     onError: (err: any) => {
-      console.error("❌ Exchange error:", err);
       setErrorMsg(err?.response?.data?.error || "Failed to link account");
     },
   });
@@ -88,16 +94,30 @@ export default function PlaidLinkButton() {
     if (token && !isLinked && !createLink.isPending && !linkToken) {
       createLink.mutate();
     }
-  }, [token, isLinked, linkToken]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isLinked, linkToken]);
 
-  // ✅ Plaid hook
+  // ✅ Plaid hook (grab institution from metadata)
   const { open, ready } = usePlaidLink({
     token: linkToken || "",
-    onSuccess: (publicToken: string) => {
-      console.log("✅ Got Plaid public_token:", publicToken);
-      exchangeToken.mutate(publicToken);
+    onSuccess: (publicToken: string, metadata: any) => {
+      exchangeToken.mutate({
+        publicToken,
+        institution: metadata?.institution
+          ? { id: metadata.institution.institution_id, name: metadata.institution.name }
+          : undefined,
+        makePrimary: true, // set true on first link if you want; optional
+      });
+    },
+    onExit: (_err, _meta) => {
+      // optional
     },
   });
+
+  // 🚀 auto-open if requested
+  React.useEffect(() => {
+    if (autoOpen && ready && linkToken && !isLinked) open();
+  }, [autoOpen, ready, linkToken, isLinked, open]);
 
   if (!token) return null;
 
@@ -111,8 +131,7 @@ export default function PlaidLinkButton() {
     );
   }
 
-  const disabled =
-    !ready || createLink.isPending || exchangeToken.isPending || !linkToken;
+  const disabled = !ready || createLink.isPending || exchangeToken.isPending || !linkToken;
 
   return (
     <div className="inline-flex flex-col items-start gap-2">
@@ -131,6 +150,7 @@ export default function PlaidLinkButton() {
           ? "Linking…"
           : "Connect bank with Plaid"}
       </button>
+
       {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
     </div>
   );

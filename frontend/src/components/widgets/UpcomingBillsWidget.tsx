@@ -10,6 +10,7 @@ import {
   type Paycheck,
 } from "../../hooks/recurringHooks";
 import { selectSelectedAccountId } from "../../app/selectors";
+import { ALL_ACCOUNTS_ID } from "../../features/filters/globalAccountFilterSlice";
 
 const glass =
   "relative rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
@@ -393,7 +394,10 @@ export default function UpcomingBillsWidget() {
         seriesId: b.seriesId ?? undefined,
         name: b.name,
         merchant: (b as any).merchant ?? undefined,
-        accountId: selectedAccountId || undefined, // ✅ keep manual/linked txn scoped to selected account
+       accountId:
+  selectedAccountId && selectedAccountId !== ALL_ACCOUNTS_ID
+    ? selectedAccountId
+    : undefined,
       });
       window.alert("Marked as paid and synced with Recent Transactions.");
     } catch (e: any) {

@@ -3,15 +3,22 @@ import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "../../app/store";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPlaidAccounts } from "../../api/plaid";
-import { fetchNetWorth } from "../../api/plaid";
+import { fetchPlaidAccounts, fetchNetWorth } from "../../api/plaid";
 import {
   fetchTransactions,
   type Transaction,
   type PagedTransactionsResponse,
 } from "../../api/transaction";
-import { ArrowUpRightIcon, ArrowDownRightIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
-import { setSelectedAccountId } from "../../features/filters/globalAccountFilterSlice";
+import {
+  ArrowUpRightIcon,
+  ArrowDownRightIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
+import {
+  ALL_ACCOUNTS_ID,
+  ALL_BANKS_ID,
+  setSelectedAccount,
+} from "../../features/filters/globalAccountFilterSlice";
 import { toIsoStartEndExclusive } from "../../helpers/date";
 
 type Props = {
@@ -23,7 +30,11 @@ type Props = {
 };
 
 const money = (n: number) =>
-  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
 
 type AccountLike = {
   account_id?: string;
@@ -67,6 +78,12 @@ function normalizeLocalRange(r: { startDate: string; endDate: string }) {
     : r;
 }
 
+// ✅ Treat sentinels as "no filter"
+const isRealAccountId = (v?: string | null) =>
+  !!v &&
+  v !== ALL_ACCOUNTS_ID &&
+  !["__all__", "__all_accounts__", "all", "undefined", "null", ""].includes(String(v));
+
 export default function StatCard({
   title,
   range,
@@ -75,7 +92,29 @@ export default function StatCard({
   showAccountSelect = false,
 }: Props) {
   const token = useSelector((s: RootState) => s.auth.token)!;
-  const selectedAccountId = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+
+  // ✅ Global filter state
+  const selectedItemId = useSelector((s: RootState) => s.accountFilter.selectedItemId);
+  const selectedAccountIdRaw = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+
+  // ✅ normalized accountId used for backend queries
+  const accountFilterId = React.useMemo(
+    () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
+    [selectedAccountIdRaw]
+  );
+
+  // ✅ Determine net worth query params:
+  // - ALL_BANKS => itemId="__all__"
+  // - specific bank => itemId=<bankItemId>
+  // accountId only allowed for single bank
+  const nwItemId = React.useMemo(() => {
+    return selectedItemId && selectedItemId !== ALL_BANKS_ID ? selectedItemId : "__all__";
+  }, [selectedItemId]);
+
+  const nwAccountId = React.useMemo(() => {
+    if (nwItemId === "__all__") return undefined; // backend rejects accountId with __all__
+    return accountFilterId;
+  }, [nwItemId, accountFilterId]);
 
   // Normalize potential UTC off-by-one in the incoming props
   const effectiveRange = React.useMemo(
@@ -94,11 +133,14 @@ export default function StatCard({
     return toIsoStartEndExclusive(effectiveRange.startDate, effectiveRange.endDate);
   }, [effectiveRange.startDate, effectiveRange.endDate]);
 
-  // ---- Accounts (for labeling the dropdown if you enable it) ----
+  // ---- Accounts (for the dropdown) ----
+  // NOTE: your backend /plaid/accounts defaults to primary bank unless itemId is provided.
+  // If you want the account dropdown to reflect selected bank, you'll need to update fetchPlaidAccounts
+  // to accept itemId and pass selectedItemId (not included here to avoid breaking your API signature).
   const { data: accountsRaw, isLoading: loadingAccounts } = useQuery<
     AccountLike[] | { accounts?: AccountLike[] }
   >({
-    queryKey: ["plaid", "accounts", "for-statcard"],
+    queryKey: ["plaid", "accounts", "for-statcard", selectedItemId],
     queryFn: () => fetchPlaidAccounts(token),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
@@ -113,32 +155,31 @@ export default function StatCard({
   }, [accountsRaw]);
 
   // ---------- DATA QUERIES ----------
-  // CASHFLOW: send ISO start + ISO end-exclusive
+  // CASHFLOW
   const txQuery = useQuery<PagedTransactionsResponse>({
     queryKey: [
-      "stats",
+      "transactions",
       "cashflow",
       title,
       startISO ?? "",
       endExclusiveISO ?? "",
-      selectedAccountId || "",
+      accountFilterId ?? "ALL",
     ],
     queryFn: () =>
       fetchTransactions(token, {
         startDate: startISO,
-        endDate: endExclusiveISO, // EXCLUSIVE end (matches backend)
+        endDate: endExclusiveISO, // EXCLUSIVE
         page: 1,
         limit: 1000,
         sortBy: "date",
         order: "desc",
-        accountId: selectedAccountId || undefined,
+        ...(accountFilterId ? { accountId: accountFilterId } : {}),
       }),
     enabled: !!token && mode === "cashflow" && !!startISO && !!endExclusiveISO,
     placeholderData: (prev) => prev as any,
     refetchOnWindowFocus: true,
   });
 
-  // Refetch when global data changes
   React.useEffect(() => {
     if (mode !== "cashflow") return;
     const handler = () => txQuery.refetch();
@@ -151,14 +192,14 @@ export default function StatCard({
       window.removeEventListener("data:manualassets:changed", handler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, startISO, endExclusiveISO, selectedAccountId]);
+  }, [mode, startISO, endExclusiveISO, accountFilterId]);
 
-  // NET WORTH (kept simple; overall)
+  // NET WORTH (respects selected bank + account)
   const nwQuery = useQuery({
-    queryKey: ["stats", "networth"],
-    queryFn: () => fetchNetWorth(token),
+    queryKey: ["plaid", "net-worth", nwItemId, nwAccountId ?? "ALL"],
+    queryFn: () => fetchNetWorth(token, { itemId: nwItemId, accountId: nwAccountId }),
     enabled: !!token && mode === "networth",
-    staleTime: 60_000,
+    staleTime: 0,
     placeholderData: (prev) => prev as any,
     refetchOnWindowFocus: true,
   });
@@ -182,7 +223,7 @@ export default function StatCard({
           title={title}
           range={effectiveRange}
           accounts={accounts}
-          selectedAccountId={selectedAccountId}
+          selectedAccountIdRaw={selectedAccountIdRaw}
           loadingAccounts={loadingAccounts}
           showAccountSelect={showAccountSelect}
         />
@@ -200,9 +241,9 @@ export default function StatCard({
 
   // ---------- RENDER ----------
   if (mode === "networth") {
-    const netWorth = nwQuery.data?.summary?.netWorth ?? 0;
-    const assets = nwQuery.data?.summary?.assets ?? 0;
-    const debts = nwQuery.data?.summary?.debts ?? 0;
+    const netWorth = (nwQuery.data as any)?.summary?.netWorth ?? 0;
+    const assets = (nwQuery.data as any)?.summary?.assets ?? 0;
+    const debts = (nwQuery.data as any)?.summary?.debts ?? 0;
     const netPositive = netWorth >= 0;
 
     return (
@@ -212,7 +253,6 @@ export default function StatCard({
           className,
         ].join(" ")}
       >
-        {/* glow */}
         <div
           className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full blur-3xl opacity-20"
           style={{
@@ -226,7 +266,7 @@ export default function StatCard({
           title={title}
           range={effectiveRange}
           accounts={accounts}
-          selectedAccountId={selectedAccountId}
+          selectedAccountIdRaw={selectedAccountIdRaw}
           loadingAccounts={loadingAccounts}
           showAccountSelect={false}
         />
@@ -245,14 +285,14 @@ export default function StatCard({
             </div>
           </div>
 
-          {/* assets vs debts bar */}
           <div className="w-40">
             <div className="flex items-center justify-between text-[11px] text-white/60">
               <span>Debt Share</span>
               <span>
                 {(() => {
                   const base = Math.max(assets + Math.abs(debts), 0);
-                  const pct = base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
+                  const pct =
+                    base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
                   return `${pct}%`;
                 })()}
               </span>
@@ -263,7 +303,8 @@ export default function StatCard({
                 style={{
                   width: (() => {
                     const base = Math.max(assets + Math.abs(debts), 0);
-                    const pct = base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
+                    const pct =
+                      base > 0 ? Math.min(100, Math.round((Math.abs(debts) / base) * 100)) : 0;
                     return `${pct}%`;
                   })(),
                 }}
@@ -275,7 +316,7 @@ export default function StatCard({
     );
   }
 
-  // cashflow mode — always render; zeros display normally
+  // cashflow mode
   const tx: Transaction[] = txQuery.data?.transactions ?? [];
   const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expense = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -304,7 +345,7 @@ export default function StatCard({
         title={title}
         range={effectiveRange}
         accounts={accounts}
-        selectedAccountId={selectedAccountId}
+        selectedAccountIdRaw={selectedAccountIdRaw}
         loadingAccounts={loadingAccounts}
         showAccountSelect={showAccountSelect}
       />
@@ -358,14 +399,14 @@ function Header({
   title,
   range,
   accounts,
-  selectedAccountId,
+  selectedAccountIdRaw,
   loadingAccounts,
   showAccountSelect,
 }: {
   title: string;
   range: { startDate: string; endDate: string };
   accounts: AccountLike[];
-  selectedAccountId: string;
+  selectedAccountIdRaw: string;
   loadingAccounts: boolean;
   showAccountSelect?: boolean;
 }) {
@@ -385,11 +426,26 @@ function Header({
           <label className="text-[11px] text-white/60">Account</label>
           <select
             className="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
-            value={selectedAccountId}
-            onChange={(e) => dispatch(setSelectedAccountId(e.target.value))}
+            value={selectedAccountIdRaw}
+            onChange={(e) => {
+              const id = e.target.value;
+
+              let label = "All accounts";
+              if (id !== ALL_ACCOUNTS_ID) {
+                const a = accounts.find((x) => (x.account_id ?? x.accountId) === id);
+                label =
+                  a?.name ||
+                  a?.official_name ||
+                  a?.officialName ||
+                  (a?.subtype ? a.subtype.toUpperCase() : "Account");
+                if (a?.mask) label += ` ••${a.mask}`;
+              }
+
+              dispatch(setSelectedAccount({ id, label }));
+            }}
             disabled={loadingAccounts}
           >
-            <option value="">All accounts</option>
+            <option value={ALL_ACCOUNTS_ID}>All accounts</option>
             {accounts.map((a, i) => {
               const id = a.account_id ?? a.accountId ?? `idx-${i}`;
               const label =

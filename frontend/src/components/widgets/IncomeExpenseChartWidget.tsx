@@ -39,7 +39,18 @@ import {
 } from "../../hooks/transactionsHooks";
 import type { Granularity } from "../../api/transaction";
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
+// ✅ use the real sentinel constant from your slice
+import { ALL_ACCOUNTS_ID } from "../../features/filters/globalAccountFilterSlice";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const glass =
   "rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
@@ -57,20 +68,17 @@ const blue = "#3b82f6";
 
 /* ------------------------- Helpers ------------------------- */
 
-// Range union + helpers
 type LocalRange = { startDate: string; endDate: string } | { endDate: string };
 function presetToLocalRange(preset: Preset): LocalRange {
   if (preset === "all") return { endDate: localYMD() };
   return toLocalYMDRange(preset);
 }
 
-// Safer number parser (no NaN)
 const n = (v: any, d = 0) => {
   const x = Number(v);
   return Number.isFinite(x) ? x : d;
 };
 
-// Friendly label: turn "GENERAL_SERVICES_ACCOUNTING" → "General Services · Accounting"
 function prettifyName(raw: any): string {
   if (!raw) return "Unknown";
   const s = String(raw)
@@ -78,7 +86,9 @@ function prettifyName(raw: any): string {
     .replace(/\s{2,}/g, " ")
     .trim();
   if (!s) return "Unknown";
-  const words = s.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  const words = s
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   if (words.length > 2) {
     const head = words.slice(0, -1).join(" ");
     const tail = words.slice(-1)[0];
@@ -87,10 +97,9 @@ function prettifyName(raw: any): string {
   return words.join(" ");
 }
 
-// Flexible getters (handles different shapes your routes might return)
 function getExpenseAmount(row: any): number {
   return (
-    n(row?.spend) ||                 // your /top-merchants shape
+    n(row?.spend) ||
     n(row?.expense) ||
     n(row?.expenseTotal) ||
     n(row?.totalExpense) ||
@@ -99,22 +108,24 @@ function getExpenseAmount(row: any): number {
   );
 }
 function getId(row: any): string {
-  return String(row?._id ?? row?.id ?? row?.txnId ?? Math.random().toString(36).slice(2));
+  return String(
+    row?._id ?? row?.id ?? row?.txnId ?? Math.random().toString(36).slice(2)
+  );
 }
 function getDesc(row: any): string {
-  return prettifyName(row?.description ?? row?.name ?? row?.merchant ?? row?.category ?? "Untitled");
+  return prettifyName(
+    row?.description ??
+      row?.name ??
+      row?.merchant ??
+      row?.category ??
+      "Untitled"
+  );
 }
 function getBurnValue(obj: any): number {
   if (!obj) return 0;
-  return (
-    n(obj?.projectedMonthly) || // ← your API’s main field
-    n(obj?.avgDaily * 30) ||    // fallback: daily × 30
-    n(obj?.total) ||
-    0
-  );
+  return n(obj?.projectedMonthly) || n(obj?.avgDaily * 30) || n(obj?.total) || 0;
 }
 
-// Accounts label lookup
 type PlaidAccount = {
   account_id?: string;
   accountId?: string;
@@ -124,8 +135,28 @@ type PlaidAccount = {
   subtype?: string | null;
   mask?: string | null;
 };
-const isRealAccountId = (v?: string | null) =>
-  !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
+
+// ✅ treat as "All" unless it’s a real account id
+const isRealAccountId = (v?: string | null) => {
+  if (!v) return false;
+
+  const s = String(v).trim();
+  const upper = s.toUpperCase();
+
+  if (
+    s === ALL_ACCOUNTS_ID ||
+    upper === "ALL" ||
+    s === "__all__" ||
+    s === "__all_accounts__" ||
+    upper === "UNDEFINED" ||
+    upper === "NULL" ||
+    s === ""
+  ) {
+    return false;
+  }
+
+  return true;
+};
 
 /* ------------------------- Chart Gradient Plugin ------------------------- */
 const strokeGradientPlugin: Plugin = {
@@ -135,7 +166,12 @@ const strokeGradientPlugin: Plugin = {
     if (!chartArea) return;
 
     const makeGrad = (hex: string) => {
-      const g = ctx.createLinearGradient(chartArea.left, chartArea.top, chartArea.right, chartArea.bottom);
+      const g = ctx.createLinearGradient(
+        chartArea.left,
+        chartArea.top,
+        chartArea.right,
+        chartArea.bottom
+      );
       const c = (h: string, a: number) => {
         const c = h.replace("#", "");
         const r = parseInt(c.slice(0, 2), 16);
@@ -158,8 +194,11 @@ const strokeGradientPlugin: Plugin = {
 /* ------------------------- Component ------------------------- */
 export default function IncomeExpenseChartWidget() {
   const token = useSelector((s: RootState) => s.auth.token);
-  const selectedAccountIdRaw = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
+  const selectedAccountIdRaw = useSelector(
+    (s: RootState) => s.accountFilter.selectedAccountId
+  );
 
+  // ✅ normalized filter id (undefined = all accounts)
   const accountFilterId = React.useMemo(
     () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
     [selectedAccountIdRaw]
@@ -170,23 +209,34 @@ export default function IncomeExpenseChartWidget() {
   const [showIncome, setShowIncome] = React.useState(true);
   const [showExpense, setShowExpense] = React.useState(true);
 
-  // 1) local YMD range
   const range = React.useMemo<LocalRange>(() => presetToLocalRange(preset), [preset]);
 
-  // 2) Convert to ISO (exclusive end) with TS-narrowing
   const isoRange = React.useMemo(() => {
     if ("startDate" in range) {
-      const { startISO, endExclusiveISO } = toIsoStartEndExclusive(range.startDate, range.endDate);
-      return { startISO, endExclusiveISO };
-    } else {
-      const { startISO, endExclusiveISO } = toIsoStartEndExclusive("1970-01-01", range.endDate);
+      const { startISO, endExclusiveISO } = toIsoStartEndExclusive(
+        range.startDate,
+        range.endDate
+      );
       return { startISO, endExclusiveISO };
     }
+    const { startISO, endExclusiveISO } = toIsoStartEndExclusive("1970-01-01", range.endDate);
+    return { startISO, endExclusiveISO };
   }, [range]);
+
+  // ✅ FIX: log ACTUAL params (don’t print "ALL" unless you’re sending it)
+  React.useEffect(() => {
+    const params: any = {
+      granularity,
+      startDate: isoRange.startISO,
+      endDate: isoRange.endExclusiveISO,
+      ...(accountFilterId ? { accountId: accountFilterId } : {}),
+    };
+    console.log("SUMMARY params (ACTUAL):", params);
+  }, [granularity, isoRange.startISO, isoRange.endExclusiveISO, accountFilterId]);
 
   // Accounts for label
   const { data: accountsRaw } = useQuery<PlaidAccount[] | { accounts: PlaidAccount[] }>({
-    queryKey: ["accounts"],
+    queryKey: ["plaid", "accounts", "income-expense-widget"],
     queryFn: () => fetchPlaidAccounts(token!),
     enabled: !!token,
     staleTime: 5 * 60 * 1000,
@@ -246,25 +296,19 @@ export default function IncomeExpenseChartWidget() {
   });
 
   /* =================== CHART =================== */
-  const labels =
-    summaryQ.data?.data.map((d) => {
-      const p = d?.period;
-      if (typeof p === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p)) return p; // YMD
-      return String(p ?? "");
-    }) ?? [];
-
-  const incomeValues = summaryQ.data?.data.map((d) => n(d.income)) ?? [];
-  const expenseValues = summaryQ.data?.data.map((d) => n(d.expense)) ?? [];
+  const labels = summaryQ.data?.data.map((d) => String(d?.period ?? "")) ?? [];
+  const incomeValues = summaryQ.data?.data.map((d) => n(d?.income)) ?? [];
+  const expenseValues = summaryQ.data?.data.map((d) => n(d?.expense)) ?? [];
 
   const datasets: ChartData<"line">["datasets"] = [
     showIncome && {
       label: "Income",
       data: incomeValues,
       _baseColor: green,
-      borderColor: green, // replaced by plugin
+      borderColor: green,
       backgroundColor: (ctx: ScriptableContext<"line">) => {
-        const chart = ctx.chart;
-        const { ctx: c, chartArea } = chart as any;
+        const chart = ctx.chart as any;
+        const { ctx: c, chartArea } = chart;
         if (!chartArea) return "rgba(34,197,94,0.15)";
         const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
         g.addColorStop(0, "rgba(34,197,94,0.22)");
@@ -282,10 +326,10 @@ export default function IncomeExpenseChartWidget() {
       label: "Expense",
       data: expenseValues,
       _baseColor: red,
-      borderColor: red, // replaced by plugin
+      borderColor: red,
       backgroundColor: (ctx: ScriptableContext<"line">) => {
-        const chart = ctx.chart;
-        const { ctx: c, chartArea } = chart as any;
+        const chart = ctx.chart as any;
+        const { ctx: c, chartArea } = chart;
         if (!chartArea) return "rgba(239,68,68,0.15)";
         const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
         g.addColorStop(0, "rgba(239,68,68,0.22)");
@@ -306,7 +350,10 @@ export default function IncomeExpenseChartWidget() {
     maintainAspectRatio: false,
     spanGaps: true,
     interaction: { mode: "index", intersect: false },
-    elements: { line: { borderWidth: 2, tension: 0.15 }, point: { radius: 0, hoverRadius: 3 } },
+    elements: {
+      line: { borderWidth: 2, tension: 0.15 },
+      point: { radius: 0, hoverRadius: 3 },
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -324,34 +371,53 @@ export default function IncomeExpenseChartWidget() {
       },
     },
     scales: {
-      x: { ticks: { color: "rgba(255,255,255,0.75)" }, grid: { color: "rgba(255,255,255,0.08)" } },
-      y: { ticks: { color: "rgba(255,255,255,0.75)", callback: (v) => currency.format(n(v)) }, grid: { color: "rgba(255,255,255,0.08)" } },
+      x: {
+        ticks: { color: "rgba(255,255,255,0.75)" },
+        grid: { color: "rgba(255,255,255,0.08)" },
+      },
+      y: {
+        ticks: {
+          color: "rgba(255,255,255,0.75)",
+          callback: (v) => currency.format(n(v)),
+        },
+        grid: { color: "rgba(255,255,255,0.08)" },
+      },
     },
   };
 
+  React.useEffect(() => {
+    console.log("summary response:", summaryQ.data);
+  }, [summaryQ.data]);
+
   const textBtn = "text-sm font-medium px-2 py-1 transition-colors";
   const textActive = "text-white underline underline-offset-4";
-  const textInactive = "text-white/70 hover:text-white hover:underline underline-offset-4";
+  const textInactive =
+    "text-white/70 hover:text-white hover:underline underline-offset-4";
 
-  /* =================== UI =================== */
   return (
     <div className={glass}>
-      {/* Header & filters */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
-          {accountFilterId && (
+
+          {accountFilterId ? (
             <div className="text-[11px] text-white/60">
-              Account: <span className="text-white">{accMap.get(accountFilterId) || "Selected account"}</span>
+              Account:{" "}
+              <span className="text-white">
+                {accMap.get(accountFilterId) || "Selected account"}
+              </span>
             </div>
+          ) : (
+            <div className="text-[11px] text-white/40 mt-0.5">All accounts</div>
           )}
+
           <div className="text-[11px] text-white/50 mt-0.5">
-            Range: {formatUTC_MMDDYYYY(isoRange.startISO)} → {formatUTC_MMDDYYYY(isoRange.endExclusiveISO)} (UTC)
+            Range: {formatUTC_MMDDYYYY(isoRange.startISO)} →{" "}
+            {formatUTC_MMDDYYYY(isoRange.endExclusiveISO)} (UTC)
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          {/* Granularity */}
           <div className="flex gap-3">
             {(["day", "month", "year"] as Granularity[]).map((g) => (
               <button
@@ -364,7 +430,6 @@ export default function IncomeExpenseChartWidget() {
             ))}
           </div>
 
-          {/* Presets */}
           <div className="flex gap-3">
             {(["7d", "30d", "90d", "ytd", "1y", "all"] as Preset[]).map((p) => (
               <button
@@ -377,7 +442,6 @@ export default function IncomeExpenseChartWidget() {
             ))}
           </div>
 
-          {/* Toggles */}
           <div className="flex gap-3">
             <button
               onClick={() => setShowIncome((s) => !s)}
@@ -397,20 +461,20 @@ export default function IncomeExpenseChartWidget() {
         </div>
       </div>
 
-      {/* Chart */}
       <div className="h-[260px]">
         {summaryQ.isLoading && <p className="text-white/70">Loading…</p>}
         {summaryQ.isError && <p className="text-rose-300">Failed to load chart.</p>}
-        {!summaryQ.isLoading && !summaryQ.isError && (
-          (datasets.length === 0 || labels.length === 0) ? (
-            <p className="text-white/70">No data for this range.</p>
-          ) : (
-            <Line data={{ labels, datasets }} options={options} plugins={[strokeGradientPlugin]} />
-          )
-        )}
+        {!summaryQ.isLoading && !summaryQ.isError && (datasets.length === 0 || labels.length === 0 ? (
+          <p className="text-white/70">No data for this range.</p>
+        ) : (
+          <Line
+            data={{ labels, datasets }}
+            options={options}
+            plugins={[strokeGradientPlugin]}
+          />
+        ))}
       </div>
-
-      {/* Insights grid */}
+ {/* Insights grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-6 text-sm">
         {/* Top Categories */}
         <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
@@ -506,13 +570,12 @@ export default function IncomeExpenseChartWidget() {
   );
 }
 
-/* ------------------------- Small UI piece: ranked bar row ------------------------- */
 function RowBar({
   label,
   amount,
   rank,
   max,
-  type, // "expense" | "income" | "neutral"
+  type,
 }: {
   label: string;
   amount: number;
@@ -522,10 +585,12 @@ function RowBar({
 }) {
   const pct = Math.max(0.02, Math.min(1, amount / Math.max(1, max)));
 
-  // 🎨 Premium gradient palettes
   const gradientFor = (t: "expense" | "income" | "neutral") => {
     const color = t === "expense" ? red : t === "income" ? green : blue;
-    return `linear-gradient(90deg, ${hexA(color, 0.35)} 0%, ${hexA(color, 0.95)} 60%, ${hexA(color, 0.35)} 100%)`;
+    return `linear-gradient(90deg, ${hexA(color, 0.35)} 0%, ${hexA(
+      color,
+      0.95
+    )} 60%, ${hexA(color, 0.35)} 100%)`;
   };
 
   return (
@@ -540,8 +605,12 @@ function RowBar({
           }}
         />
       </div>
-      <div className="text-white/80 text-sm tabular-nums">{currency.format(amount)}</div>
-      <div className="col-span-3 -mt-0.5 text-[11px] text-white/70 truncate">{label}</div>
+      <div className="text-white/80 text-sm tabular-nums">
+        {currency.format(amount)}
+      </div>
+      <div className="col-span-3 -mt-0.5 text-[11px] text-white/70 truncate">
+        {label}
+      </div>
     </div>
   );
 }
