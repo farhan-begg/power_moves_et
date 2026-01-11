@@ -69,3 +69,15 @@ export function formatUTC_MMDDYYYY(iso: string) {
     timeZone: "UTC",           // <- key: lock to UTC for display
   }).format(d);
 }
+
+/** Add (or subtract) days from a YYYY-MM-DD string, returning a new YYYY-MM-DD. */
+export function addDaysYMD(ymd: string, days: number): string {
+  const d = ymdToLocalDate(ymd);
+  d.setDate(d.getDate() + days);
+  return localYMD(d);
+}
+
+/** Alias for localYMD() with no args - returns today as YYYY-MM-DD. */
+export function localTodayYMD(): string {
+  return localYMD();
+}

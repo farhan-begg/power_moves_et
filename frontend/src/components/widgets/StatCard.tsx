@@ -19,7 +19,15 @@ import {
   ALL_BANKS_ID,
   setSelectedAccount,
 } from "../../features/filters/globalAccountFilterSlice";
-import { toIsoStartEndExclusive } from "../../helpers/date";
+import {
+  toIsoStartEndExclusive,
+  ymdToLocalDate,
+  localTodayYMD,
+  addDaysYMD,
+} from "../../helpers/date";
+import { formatMoney } from "../../utils/currency";
+import { isValidAccountId } from "../../utils/accountFilter";
+import { GlassCard, Pill, SkeletonCard } from "../common";
 
 type Props = {
   title: string;
@@ -28,13 +36,6 @@ type Props = {
   mode?: "cashflow" | "networth";
   showAccountSelect?: boolean;
 };
-
-const money = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
 
 type AccountLike = {
   account_id?: string;
@@ -47,28 +48,7 @@ type AccountLike = {
   subtype?: string | null;
 };
 
-/* ----------------- Date helpers ----------------- */
-function ymdToLocalDate(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, (m as number) - 1, d, 0, 0, 0, 0);
-}
-function localTodayYMD() {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function addDaysYMD(ymd: string, days: number) {
-  const d = ymdToLocalDate(ymd);
-  d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-/** If end looks like “tomorrow” vs local today, shift both back one day. */
+/** If end looks like "tomorrow" vs local today, shift both back one day. */
 function normalizeLocalRange(r: { startDate: string; endDate: string }) {
   const today = ymdToLocalDate(localTodayYMD());
   const end = ymdToLocalDate(r.endDate);
@@ -77,12 +57,6 @@ function normalizeLocalRange(r: { startDate: string; endDate: string }) {
     ? { startDate: addDaysYMD(r.startDate, -1), endDate: addDaysYMD(r.endDate, -1) }
     : r;
 }
-
-// ✅ Treat sentinels as "no filter"
-const isRealAccountId = (v?: string | null) =>
-  !!v &&
-  v !== ALL_ACCOUNTS_ID &&
-  !["__all__", "__all_accounts__", "all", "undefined", "null", ""].includes(String(v));
 
 export default function StatCard({
   title,
@@ -93,26 +67,23 @@ export default function StatCard({
 }: Props) {
   const token = useSelector((s: RootState) => s.auth.token)!;
 
-  // ✅ Global filter state
+  // Global filter state
   const selectedItemId = useSelector((s: RootState) => s.accountFilter.selectedItemId);
   const selectedAccountIdRaw = useSelector((s: RootState) => s.accountFilter.selectedAccountId);
 
-  // ✅ normalized accountId used for backend queries
+  // Normalized accountId used for backend queries
   const accountFilterId = React.useMemo(
-    () => (isRealAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
+    () => (isValidAccountId(selectedAccountIdRaw) ? selectedAccountIdRaw : undefined),
     [selectedAccountIdRaw]
   );
 
-  // ✅ Determine net worth query params:
-  // - ALL_BANKS => itemId="__all__"
-  // - specific bank => itemId=<bankItemId>
-  // accountId only allowed for single bank
+  // Determine net worth query params
   const nwItemId = React.useMemo(() => {
     return selectedItemId && selectedItemId !== ALL_BANKS_ID ? selectedItemId : "__all__";
   }, [selectedItemId]);
 
   const nwAccountId = React.useMemo(() => {
-    if (nwItemId === "__all__") return undefined; // backend rejects accountId with __all__
+    if (nwItemId === "__all__") return undefined;
     return accountFilterId;
   }, [nwItemId, accountFilterId]);
 
@@ -133,10 +104,7 @@ export default function StatCard({
     return toIsoStartEndExclusive(effectiveRange.startDate, effectiveRange.endDate);
   }, [effectiveRange.startDate, effectiveRange.endDate]);
 
-  // ---- Accounts (for the dropdown) ----
-  // NOTE: your backend /plaid/accounts defaults to primary bank unless itemId is provided.
-  // If you want the account dropdown to reflect selected bank, you'll need to update fetchPlaidAccounts
-  // to accept itemId and pass selectedItemId (not included here to avoid breaking your API signature).
+  // Accounts (for the dropdown)
   const { data: accountsRaw, isLoading: loadingAccounts } = useQuery<
     AccountLike[] | { accounts?: AccountLike[] }
   >({
@@ -154,8 +122,7 @@ export default function StatCard({
       : ((accountsRaw as { accounts?: AccountLike[] }).accounts ?? []);
   }, [accountsRaw]);
 
-  // ---------- DATA QUERIES ----------
-  // CASHFLOW
+  // CASHFLOW query
   const txQuery = useQuery<PagedTransactionsResponse>({
     queryKey: [
       "transactions",
@@ -168,7 +135,7 @@ export default function StatCard({
     queryFn: () =>
       fetchTransactions(token, {
         startDate: startISO,
-        endDate: endExclusiveISO, // EXCLUSIVE
+        endDate: endExclusiveISO,
         page: 1,
         limit: 1000,
         sortBy: "date",
@@ -194,7 +161,7 @@ export default function StatCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, startISO, endExclusiveISO, accountFilterId]);
 
-  // NET WORTH (respects selected bank + account)
+  // NET WORTH query
   const nwQuery = useQuery({
     queryKey: ["plaid", "net-worth", nwItemId, nwAccountId ?? "ALL"],
     queryFn: () => fetchNetWorth(token, { itemId: nwItemId, accountId: nwAccountId }),
@@ -209,16 +176,11 @@ export default function StatCard({
   const refetch = mode === "cashflow" ? txQuery.refetch : nwQuery.refetch;
   const isFetching = mode === "cashflow" ? txQuery.isFetching : nwQuery.isFetching;
 
-  if (loading) return <StatCardSkeleton title={title} className={className} />;
+  if (loading) return <SkeletonCard title={title} className={className} />;
 
   if (isError) {
     return (
-      <div
-        className={[
-          "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
-          className,
-        ].join(" ")}
-      >
+      <GlassCard className={className}>
         <Header
           title={title}
           range={effectiveRange}
@@ -235,11 +197,11 @@ export default function StatCard({
           <ArrowPathIcon className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           Retry
         </button>
-      </div>
+      </GlassCard>
     );
   }
 
-  // ---------- RENDER ----------
+  // NET WORTH mode
   if (mode === "networth") {
     const netWorth = (nwQuery.data as any)?.summary?.netWorth ?? 0;
     const assets = (nwQuery.data as any)?.summary?.assets ?? 0;
@@ -247,21 +209,11 @@ export default function StatCard({
     const netPositive = netWorth >= 0;
 
     return (
-      <div
-        className={[
-          "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl transition-shadow hover:shadow-2xl",
-          className,
-        ].join(" ")}
+      <GlassCard
+        className={className}
+        hover
+        glow={netPositive ? "positive" : "negative"}
       >
-        <div
-          className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full blur-3xl opacity-20"
-          style={{
-            background: netPositive
-              ? "radial-gradient(60% 60% at 50% 50%, rgba(16,185,129,.35), transparent)"
-              : "radial-gradient(60% 60% at 50% 50%, rgba(244,63,94,.35), transparent)",
-          }}
-        />
-
         <Header
           title={title}
           range={effectiveRange}
@@ -281,7 +233,7 @@ export default function StatCard({
               ].join(" ")}
             >
               {netPositive ? "+" : "-"}
-              {money(Math.abs(netWorth))}
+              {formatMoney(Math.abs(netWorth))}
             </div>
           </div>
 
@@ -312,11 +264,11 @@ export default function StatCard({
             </div>
           </div>
         </div>
-      </div>
+      </GlassCard>
     );
   }
 
-  // cashflow mode
+  // CASHFLOW mode
   const tx: Transaction[] = txQuery.data?.transactions ?? [];
   const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expense = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -326,21 +278,11 @@ export default function StatCard({
   const netPositive = net >= 0;
 
   return (
-    <div
-      className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl transition-shadow hover:shadow-2xl",
-        className,
-      ].join(" ")}
+    <GlassCard
+      className={className}
+      hover
+      glow={netPositive ? "positive" : "negative"}
     >
-      <div
-        className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full blur-3xl opacity-20"
-        style={{
-          background: netPositive
-            ? "radial-gradient(60% 60% at 50% 50%, rgba(16,185,129,.35), transparent)"
-            : "radial-gradient(60% 60% at 50% 50%, rgba(244,63,94,.35), transparent)",
-        }}
-      />
-
       <Header
         title={title}
         range={effectiveRange}
@@ -360,7 +302,7 @@ export default function StatCard({
             ].join(" ")}
           >
             {netPositive ? "+" : "-"}
-            {money(Math.abs(net))}
+            {formatMoney(Math.abs(net))}
           </div>
         </div>
         <div className="w-40">
@@ -378,23 +320,22 @@ export default function StatCard({
         <Pill
           icon={<ArrowUpRightIcon className="h-4 w-4" />}
           label="Income"
-          value={money(income)}
-          className="bg-emerald-400/10 text-emerald-200 ring-emerald-400/20"
+          value={formatMoney(income)}
+          kind="positive"
         />
         <Pill
           icon={<ArrowDownRightIcon className="h-4 w-4" />}
           label="Expense"
-          value={money(expense)}
-          className="bg-rose-400/10 text-rose-200 ring-rose-400/20"
+          value={formatMoney(expense)}
+          kind="negative"
           prefix="-"
         />
       </div>
-    </div>
+    </GlassCard>
   );
 }
 
-/* ---------- pieces ---------- */
-
+/* ---------- Header ---------- */
 function Header({
   title,
   range,
@@ -462,67 +403,6 @@ function Header({
           </select>
         </div>
       )}
-    </div>
-  );
-}
-
-function Pill({
-  icon,
-  label,
-  value,
-  className,
-  prefix,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  className?: string;
-  prefix?: string;
-}) {
-  return (
-    <div
-      className={[
-        "flex items-center justify-between rounded-xl px-3 py-2 ring-1",
-        "shadow-inner shadow-black/5",
-        className ?? "",
-      ].join(" ")}
-    >
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white/10">
-          {icon}
-        </span>
-        <span className="text-xs text-white/70">{label}</span>
-      </div>
-      <span className="font-mono tabular-nums text-sm text-white">
-        {prefix ?? ""}
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function StatCardSkeleton({ title, className = "" }: { title: string; className?: string }) {
-  return (
-    <div
-      className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
-        className,
-      ].join(" ")}
-    >
-      <div className="flex items-baseline justify-between">
-        <div className="h-3 w-32 rounded bg-white/10" />
-        <div className="h-2 w-28 rounded bg-white/10" />
-      </div>
-      <div className="mt-4 h-8 w-40 rounded bg-white/10" />
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="h-10 rounded-xl bg-white/10" />
-        <div className="h-10 rounded-xl bg-white/10" />
-      </div>
-      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-        <div className="animate-[shimmer_2s_infinite] absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-      </div>
-      <style>{`@keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(200%); } }`}</style>
-      <div className="sr-only">{title} loading</div>
     </div>
   );
 }
