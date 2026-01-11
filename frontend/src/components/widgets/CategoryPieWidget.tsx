@@ -12,7 +12,7 @@ import { motion, LayoutGroup } from "framer-motion";
 type Preset = "30d" | "90d" | "ytd" | "1y";
 
 const glass =
-  "relative rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
+  "relative overflow-hidden rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
 
 const isRealAccountId = (v?: string | null) =>
   !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
@@ -133,35 +133,36 @@ function Segmented({
 
   return (
     <LayoutGroup id={id}>
-      <div className="inline-flex items-center gap-1 rounded-full bg-white/5 p-1 ring-1 ring-white/10 shadow-inner">
+      <div className="inline-flex items-center gap-0.5 rounded-full bg-white/5 p-1 ring-1 ring-white/10 shadow-inner">
         {options.map((opt) => {
           const active = value === opt.value;
           return (
-            <motion.button
+            <button
               key={opt.value}
               onClick={() => onChange(opt.value)}
-              className={`relative ${pad} ${text} rounded-full text-white/80 transition`}
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.97 }}
+              className={[
+                `relative ${pad} ${text} rounded-full transition-colors duration-150`,
+                active ? "text-white" : "text-white/60 hover:text-white/80 active:text-white",
+              ].join(" ")}
               style={{ WebkitTapHighlightColor: "transparent" }}
             >
-              {/* thumb */}
+              {/* animated thumb */}
               {active && (
                 <motion.span
                   layoutId={`seg-thumb-${id}`}
                   className="absolute inset-0 rounded-full"
-                  transition={{ type: "spring", stiffness: 500, damping: 36, mass: 0.28 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
                   style={{
                     background:
                       "radial-gradient(120% 120% at 50% 50%, rgba(255,255,255,0.22), rgba(255,255,255,0.10))",
                     boxShadow:
-                      "0 0 16px rgba(255,255,255,0.18) inset, 0 2px 10px rgba(0,0,0,0.25)",
-                    border: "1px solid rgba(255,255,255,0.22)",
+                      "0 0 12px rgba(255,255,255,0.15) inset, 0 2px 8px rgba(0,0,0,0.2)",
+                    border: "1px solid rgba(255,255,255,0.18)",
                   }}
                 />
               )}
-              <span className="relative z-10">{opt.label}</span>
-            </motion.button>
+              <span className="relative z-10 select-none">{opt.label}</span>
+            </button>
           );
         })}
       </div>
@@ -259,18 +260,17 @@ export default function CategoryPieWidget() {
       />
 
       {/* Header */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-white">
-            {mode === "expense" ? "Spending by Category" : "Income by Category"}
-          </h3>
-          <div className="text-xs text-white/60">
-            {preset.toUpperCase()} · {accountId ? "Selected account" : "All accounts"}
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-semibold text-white truncate">
+              {mode === "expense" ? "Spending by Category" : "Income by Category"}
+            </h3>
+            <div className="text-xs text-white/60">
+              {preset.toUpperCase()} · {accountId ? "Selected account" : "All accounts"}
+            </div>
           </div>
-        </div>
-
-        {/* Premium animated controls */}
-        <div className="flex items-center gap-3">
+          {/* Mode toggle - always visible next to title */}
           <Segmented
             id="mode"
             value={mode}
@@ -279,8 +279,12 @@ export default function CategoryPieWidget() {
               { label: "Spending", value: "expense" },
               { label: "Income", value: "income" },
             ]}
-            size="md"
+            size="sm"
           />
+        </div>
+
+        {/* Date range controls - separate row, scrollable if needed */}
+        <div className="flex justify-end overflow-x-auto">
           <Segmented
             id="preset"
             value={preset}
@@ -438,15 +442,15 @@ export default function CategoryPieWidget() {
         )}
       </div>
 
-      {/* Icon-only chips (animated) */}
+      {/* Icon-only chips */}
       {pieData.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           {pieData.map((row, idx) => {
-            const color = row.label === "Other" ? "#9ca3af69" : colorForLabel(row.label);
+            const color = row.label === "Other" ? "#9ca3af" : colorForLabel(row.label);
             const active = isActive(idx);
             const nice = prettyLabel(row.label);
             return (
-              <motion.button
+              <button
                 key={`chip-${row.label}-${idx}`}
                 onClick={() => {
                   toggleIndex(idx);
@@ -454,22 +458,23 @@ export default function CategoryPieWidget() {
                 }}
                 title={`${nice} — ${money(row.value)}`}
                 className={[
-                  "h-9 w-9 rounded-full grid place-items-center ring-1 transition",
-                  active ? "scale-105" : "",
+                  "h-9 w-9 rounded-full grid place-items-center ring-1 ring-white/10",
+                  "transition-all duration-150 ease-out",
+                  "hover:ring-2 hover:-translate-y-0.5",
+                  "active:scale-95 active:translate-y-0",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
                 ].join(" ")}
                 style={{
-                  background: "rgba(255,255,255,0.06)",
-                  borderColor: "rgba(255,255,255,0.12)",
-                  color: "white",
+                  background: active
+                    ? `linear-gradient(135deg, ${color}30, ${color}15)`
+                    : "rgba(255,255,255,0.06)",
+                  borderColor: active ? `${color}60` : "rgba(255,255,255,0.12)",
+                  boxShadow: active ? `0 0 16px ${color}40, inset 0 0 8px ${color}20` : "none",
+                  WebkitTapHighlightColor: "transparent",
                 }}
-                initial={{ opacity: 0, y: 2 }}
-                animate={{ opacity: 1, y: 0 }}
-                whileHover={{ y: -2, boxShadow: `0 0 18px ${color}cc, inset 0 0 10px ${color}26` }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
               >
                 <CategoryIcon category={row.label} className="h-4 w-4" color={color} />
-              </motion.button>
+              </button>
             );
           })}
         </div>
