@@ -425,14 +425,14 @@ export default function UpcomingBillsWidget() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => overviewQ.refetch()}
-            className="text-xs rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
+            className="text-xs rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 md:px-2 md:py-1 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
           >
             Refresh
           </button>
           <button
             onClick={() => runDetect.mutate(180)}
             disabled={!token || runDetect.isPending}
-            className="text-xs rounded-lg bg-[var(--positive-bg-soft)] px-2.5 py-1.5 text-[var(--positive)] ring-1 ring-[var(--positive-ring)] hover:bg-[var(--positive-bg-soft)]/80 disabled:opacity-50"
+            className="text-xs rounded-lg bg-[var(--positive-bg-soft)] px-2.5 py-1.5 md:px-2 md:py-1 text-[var(--positive)] ring-1 ring-[var(--positive-ring)] hover:bg-[var(--positive-bg-soft)]/80 disabled:opacity-50"
             title="Run detection and persist matches"
           >
             {runDetect.isPending ? "Detecting…" : "Detect & Apply"}
@@ -450,7 +450,7 @@ export default function UpcomingBillsWidget() {
           <div className="mt-2">
             <button
               onClick={() => overviewQ.refetch()}
-              className="text-xs rounded-md bg-[var(--btn-bg)] px-2.5 py-1.5 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
+              className="text-xs rounded-md bg-[var(--btn-bg)] px-2.5 py-1.5 md:px-2 md:py-1 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
             >
               Retry
             </button>
@@ -602,7 +602,7 @@ export default function UpcomingBillsWidget() {
                       <button
                         onClick={() => onMarkPaidViaTx(b)}
                         disabled={matchPaid.isPending}
-                        className="text-xs rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)] disabled:opacity-50"
+                        className="text-xs rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 md:px-2 md:py-1 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)] disabled:opacity-50"
                       >
                         {matchPaid.isPending ? "Saving…" : "Match Tx"}
                       </button>

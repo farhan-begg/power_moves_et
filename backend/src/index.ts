@@ -5,6 +5,7 @@ import cors from "cors";
 
 import transactionRoutes from "./routes/transactionRoutes";
 import authRoutes from "./routes/authRoutes";
+import oauthRoutes from "./routes/oauthRoutes";
 import manualAssetRoutes from "./routes/manualAssetRoutes";
 import positionsRoutes from "./routes/positionsRoutes";
 import adviceRoutes from "./routes/adviceRoutes";
@@ -70,6 +71,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 /* ---------- Routes ---------- */
 app.use("/api/crypto", cryptoRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/auth", oauthRoutes); // ✅ OAuth routes (Google & Apple)
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/stocks", positionsRoutes);
 app.use("/api/plaid", plaidRoutes)

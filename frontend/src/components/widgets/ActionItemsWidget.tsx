@@ -226,14 +226,14 @@ export default function ActionItemsWidget() {
   }
 
   return (
-    <GlassCard className="p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <LightBulbIcon className="w-6 h-6 text-[var(--positive)]" />
-        <h3 className="text-lg font-semibold text-[var(--text-primary)]">Action Items</h3>
-        <span className="text-xs px-2 py-1 rounded-full bg-[var(--btn-bg)] text-[var(--text-secondary)]">
-          {actionItems.length}
-        </span>
-      </div>
+      <GlassCard className="p-4 md:p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <LightBulbIcon className="w-5 h-5 md:w-6 md:h-6 text-[var(--positive)]" />
+          <h3 className="text-base md:text-lg font-semibold text-[var(--text-primary)]">Action Items</h3>
+          <span className="text-xs px-2 py-1 rounded-full bg-[var(--btn-bg)] text-[var(--text-secondary)]">
+            {actionItems.length}
+          </span>
+        </div>
 
       <div className="space-y-3">
         {actionItems.map((item, idx) => (
@@ -242,10 +242,10 @@ export default function ActionItemsWidget() {
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className={`rounded-lg border p-4 ${getPriorityColor(item.priority)}`}
+            className={`rounded-lg border p-3 md:p-4 ${getPriorityColor(item.priority)}`}
           >
-            <div className="flex items-start gap-3">
-              <div className="text-2xl">{getCategoryIcon(item.category)}</div>
+            <div className="flex items-start gap-2 md:gap-3">
+              <div className="text-xl md:text-2xl">{getCategoryIcon(item.category)}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <h4 className="text-sm font-semibold text-[var(--text-primary)]">{item.title}</h4>
@@ -261,8 +261,9 @@ export default function ActionItemsWidget() {
                   </div>
                 )}
               </div>
+              {/* ✅ Desktop: Show next button, Mobile: Hide */}
               {item.actionUrl && (
-                <ArrowRightIcon className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
+                <ArrowRightIcon className="hidden md:block w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
               )}
             </div>
           </motion.div>

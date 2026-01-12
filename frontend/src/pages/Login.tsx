@@ -79,7 +79,10 @@ export default function Login() {
 
         <div className="flex items-center justify-between text-xs">
           <label className="inline-flex items-center gap-2 select-none">
-            <input type="checkbox" className="accent-emerald-400" />
+            <input 
+              type="checkbox" 
+              className="accent-emerald-400 rounded border-white/20 focus:ring-2 focus:ring-emerald-400/40" 
+            />
             <span className="text-white/70">Remember me</span>
           </label>
           <Link to="/forgot" className="text-emerald-300 hover:text-emerald-200">
@@ -94,23 +97,6 @@ export default function Login() {
         >
           {loading ? "Logging in…" : "Log in"}
         </button>
-
-        {/* Optional OAuth placeholders */}
-        <div className="relative pt-2">
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/10" />
-            <span className="text-[11px] text-white/50">or</span>
-            <div className="h-px flex-1 bg-white/10" />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <button type="button" className="rounded-lg bg-white/5 ring-1 ring-white/10 px-3 py-2 text-xs hover:bg-white/10">
-              Continue with Google
-            </button>
-            <button type="button" className="rounded-lg bg-white/5 ring-1 ring-white/10 px-3 py-2 text-xs hover:bg-white/10">
-              Continue with Apple
-            </button>
-          </div>
-        </div>
 
         <p className="text-xs text-white/60">
           New here?{" "}

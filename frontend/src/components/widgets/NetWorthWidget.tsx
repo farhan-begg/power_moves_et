@@ -478,7 +478,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
       </div>
 
       {/* Pills */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-2 md:gap-3">
         <Pill label="Assets" value={money(assetsSum, currencyHint)} kind="positive" />
         <Pill label="Debts" value={money(Math.abs(debts), currencyHint)} kind="negative" prefix="-" />
       </div>
@@ -884,13 +884,13 @@ function Pill({
   return (
     <div
       className={[
-        "flex items-center justify-between rounded-xl px-3 py-2 ring-1",
+        "flex items-center justify-between rounded-xl px-3 py-2 md:px-3 md:py-2 ring-1",
         "shadow-inner shadow-black/5",
         styles,
       ].join(" ")}
     >
-      <span className="text-xs text-[var(--text-secondary)]">{label}</span>
-      <span className="font-mono tabular-nums text-sm text-[var(--text-primary)]">
+      <span className="text-[10px] md:text-xs text-[var(--text-secondary)] whitespace-nowrap min-w-0 flex-shrink">{label}</span>
+      <span className="font-mono tabular-nums text-xs md:text-sm text-[var(--text-primary)] ml-2 flex-shrink-0 truncate max-w-[50%] md:max-w-none">
         {prefix ?? ""}
         {value}
       </span>

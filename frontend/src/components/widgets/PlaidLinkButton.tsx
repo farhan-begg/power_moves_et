@@ -194,10 +194,10 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
             e.currentTarget.style.opacity = "1";
             e.currentTarget.style.transform = "scale(1)";
           }}
-          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
+          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 md:px-4 md:py-2 rounded-xl font-medium text-[var(--text-primary)] transition
                      backdrop-blur-md border border-[var(--widget-border)]
                      bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] active:bg-[var(--btn-hover)] disabled:opacity-50
-                     ring-1 ring-[var(--widget-ring)] touch-manipulation min-h-[44px] text-sm sm:text-base"
+                     ring-1 ring-[var(--widget-ring)] touch-manipulation min-h-[44px] md:min-h-0 text-sm sm:text-base"
           style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
         >
           {busy ? "Preparing…" : "Connect your first bank"}
@@ -217,10 +217,10 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
             e.currentTarget.style.opacity = "1";
             e.currentTarget.style.transform = "scale(1)";
           }}
-          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
+          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 md:px-4 md:py-2 rounded-xl font-medium text-[var(--text-primary)] transition
                      backdrop-blur-md border border-[var(--widget-border)]
                      bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] active:bg-[var(--btn-hover)] disabled:opacity-50
-                     ring-1 ring-[var(--widget-ring)] touch-manipulation min-h-[44px] text-sm sm:text-base"
+                     ring-1 ring-[var(--widget-ring)] touch-manipulation min-h-[44px] md:min-h-0 text-sm sm:text-base"
           style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
         >
           {busy ? "Preparing…" : "Add another bank"}

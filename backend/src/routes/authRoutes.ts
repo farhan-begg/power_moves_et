@@ -54,11 +54,21 @@ router.post("/register", async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Name, email, and password are required" });
     }
+    
+    // ✅ Password is required for local registration
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
 
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ error: "Email already registered" });
 
-    const user = new User({ name, email, password });
+    const user = new User({ 
+      name, 
+      email, 
+      password, 
+      provider: "local" // ✅ Mark as local user
+    });
     await user.save();
 
     const token = generateToken(String(user._id));
@@ -86,7 +96,18 @@ router.post("/login", async (req, res) => {
     }
 
     const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
+    if (!user) {
+      return res.status(400).json({ error: "Invalid email or password" });
+    }
+    
+    // ✅ Check if user has a password (OAuth users don't)
+    if (!user.password) {
+      return res.status(400).json({ 
+        error: "This account uses social login. Please sign in with Google or Apple." 
+      });
+    }
+    
+    if (!(await user.comparePassword(password))) {
       return res.status(400).json({ error: "Invalid email or password" });
     }
 

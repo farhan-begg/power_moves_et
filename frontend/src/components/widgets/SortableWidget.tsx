@@ -79,13 +79,15 @@ export default function SortableWidget({
         {...listeners}
       >
         <div className="flex items-center gap-2 text-sm sm:text-base font-medium text-[var(--text-primary)]">
-          <ArrowsUpDownIcon className="h-4 w-4 opacity-70" />
+          <div className="flex items-center justify-center">
+            <ArrowsUpDownIcon className="h-4 w-4 opacity-70" />
+          </div>
           <span className="truncate">{title}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => dispatch(toggleWidgetSize(id))}
-            className="p-1 rounded-md hover:bg-[var(--btn-hover)] text-[var(--text-secondary)]"
+            className="flex items-center justify-center p-1.5 rounded-md hover:bg-[var(--btn-hover)] text-[var(--text-secondary)] transition-colors"
             title={`Toggle size (${size === "lg" ? "shrink" : "expand"})`}
           >
             <ArrowsPointingOutIcon className="h-4 w-4" />
@@ -93,7 +95,7 @@ export default function SortableWidget({
           {onRemove && (
             <button
               onClick={onRemove}
-              className="p-1 rounded-md hover:bg-[var(--btn-hover)] text-[var(--text-secondary)]"
+              className="flex items-center justify-center p-1.5 rounded-md hover:bg-[var(--btn-hover)] text-[var(--text-secondary)] transition-colors"
               title="Remove widget"
             >
               <XMarkIcon className="h-4 w-4" />

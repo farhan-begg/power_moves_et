@@ -136,23 +136,6 @@ export default function Register() {
           {loading ? "Creating account…" : "Create account"}
         </button>
 
-        {/* Optional OAuth placeholders */}
-        <div className="relative pt-2">
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/10" />
-            <span className="text-[11px] text-white/50">or</span>
-            <div className="h-px flex-1 bg-white/10" />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <button type="button" className="rounded-lg bg-white/5 ring-1 ring-white/10 px-3 py-2 text-xs hover:bg-white/10">
-              Sign up with Google
-            </button>
-            <button type="button" className="rounded-lg bg-white/5 ring-1 ring-white/10 px-3 py-2 text-xs hover:bg-white/10">
-              Sign up with Apple
-            </button>
-          </div>
-        </div>
-
         <p className="text-xs text-white/60">
           Already have an account?{" "}
           <Link to="/login" className="text-emerald-300 hover:text-emerald-200">

@@ -1,27 +1,26 @@
 // src/components/widgets/WidgetHost.tsx (or wherever this file lives)
-import React from "react";
-import StatTodayWidget from "../widgets/StatTodayWidget";
-import StatMonthWidget from "../widgets/StatMonthWidget";
-import StatYearWidget from "../widgets/StatYearWidget";
-import IncomeExpenseChartWidget from "../widgets/IncomeExpenseChartWidget";
-import BankFlowWidget from "../widgets/BankFlowWidget";
-import TransactionsListWidget from "../widgets/TransactionsListWidget";
-import NetWorthWidget from "../widgets/NetWorthWidget";
-import AccountsWidget from "../widgets/AccountsWidget";
-// import CardsWidget from "../widgets/CardsWidget"; // TODO: Fix widget
-// import InvestmentsWidget from "../widgets/InvestmentsWidget"; // TODO: Fix widget
-// import StocksPortfolioWidget from "../widgets/StocksPortfolioWidget"; // TODO: Fix widget
+import React, { Suspense, lazy } from "react";
 import type { WidgetType } from "../../features/widgets/widgetsSlice";
-// import AdviceWidget from "../widgets/AdviceWidget"; // TODO: Fix widget
-import PlaidLinkButton from "../widgets/PlaidLinkButton";
-import GoalsWidget from "../widgets/GoalsWidget";
-import CategoryPieWidget from "../widgets/CategoryPieWidget";
-import UpcomingBillsWidget from "../widgets/UpcomingBillsWidget";
-// import CryptoPortfolioWidget from "../widgets/CryptoPortfolioWidget"; // TODO: Fix widget
-import NetWorthProjectionWidget from "../widgets/NetWorthProjectionWidget";
-import FinancialHealthWidget from "../widgets/FinancialHealthWidget";
-import ActionItemsWidget from "../widgets/ActionItemsWidget";
-import PlaceholderWidget from "../widgets/PlaceholderWidget";
+import { SkeletonCard } from "../common";
+
+// ✅ Mobile Performance: Lazy load widgets for code splitting
+// Only load widgets when they're actually rendered
+const StatTodayWidget = lazy(() => import("../widgets/StatTodayWidget"));
+const StatMonthWidget = lazy(() => import("../widgets/StatMonthWidget"));
+const StatYearWidget = lazy(() => import("../widgets/StatYearWidget"));
+const IncomeExpenseChartWidget = lazy(() => import("../widgets/IncomeExpenseChartWidget"));
+const BankFlowWidget = lazy(() => import("../widgets/BankFlowWidget"));
+const TransactionsListWidget = lazy(() => import("../widgets/TransactionsListWidget"));
+const NetWorthWidget = lazy(() => import("../widgets/NetWorthWidget"));
+const AccountsWidget = lazy(() => import("../widgets/AccountsWidget"));
+const PlaidLinkButton = lazy(() => import("../widgets/PlaidLinkButton"));
+const GoalsWidget = lazy(() => import("../widgets/GoalsWidget"));
+const CategoryPieWidget = lazy(() => import("../widgets/CategoryPieWidget"));
+const UpcomingBillsWidget = lazy(() => import("../widgets/UpcomingBillsWidget"));
+const NetWorthProjectionWidget = lazy(() => import("../widgets/NetWorthProjectionWidget"));
+const FinancialHealthWidget = lazy(() => import("../widgets/FinancialHealthWidget"));
+const ActionItemsWidget = lazy(() => import("../widgets/ActionItemsWidget"));
+const PlaceholderWidget = lazy(() => import("../widgets/PlaceholderWidget"));
 
 const registry: Record<WidgetType, React.ComponentType> = {
   "plaid-connect":  PlaidLinkButton,
@@ -46,7 +45,14 @@ const registry: Record<WidgetType, React.ComponentType> = {
   "action-items": ActionItemsWidget,
 };
 
+// ✅ Mobile Performance: Widget loading fallback
+const WidgetLoader = () => <SkeletonCard className="h-48" />;
+
 export default function WidgetHost({ type }: { type: WidgetType }) {
   const Cmp = registry[type];
-  return Cmp ? <Cmp /> : null;
+  return Cmp ? (
+    <Suspense fallback={<WidgetLoader />}>
+      <Cmp />
+    </Suspense>
+  ) : null;
 }

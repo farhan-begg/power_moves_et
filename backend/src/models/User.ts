@@ -4,7 +4,9 @@ import bcrypt from "bcryptjs";
 export interface IUser extends Document {
   name: string;
   email: string;
-  password: string;
+  password?: string; // ✅ Optional for OAuth users
+  provider?: "local" | "google" | "apple"; // ✅ OAuth provider
+  providerId?: string; // ✅ OAuth provider user ID
   widgetPreferences?: {
     order: string[];
     widgets: Record<string, any>;
@@ -23,7 +25,13 @@ const UserSchema = new Schema<IUser>(
       lowercase: true,
       trim: true,
     },
-    password: { type: String, required: true },
+    password: { type: String, required: false }, // ✅ Optional for OAuth users
+    provider: { 
+      type: String, 
+      enum: ["local", "google", "apple"], 
+      default: "local" 
+    }, // ✅ OAuth provider
+    providerId: { type: String }, // ✅ OAuth provider user ID
     widgetPreferences: {
       order: { type: [String], default: [] },
       widgets: { type: Schema.Types.Mixed, default: {} },
@@ -32,16 +40,23 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
-// 🔒 Hash password
+// 🔒 Hash password (only for local users)
 UserSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  if (!this.isModified("password") || !this.password) return next();
+  // Only hash password if it exists and is not already hashed
+  if (this.password.length < 60) { // bcrypt hashes are 60 chars
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
   next();
 });
 
-// 🔑 Compare password
+// 🔑 Compare password (only for local users)
 UserSchema.methods.comparePassword = function (candidatePassword: string) {
+  if (!this.password) {
+    // OAuth users don't have passwords
+    return Promise.resolve(false);
+  }
   return bcrypt.compare(candidatePassword, this.password);
 };
 

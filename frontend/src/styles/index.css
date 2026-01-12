@@ -1,8 +1,85 @@
-
 /* src/theme/theme.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ✅ Mobile Performance: Optimize rendering and scrolling */
+* {
+  /* Enable hardware acceleration for better mobile performance */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Optimize touch scrolling */
+  -webkit-overflow-scrolling: touch;
+}
+
+html {
+  /* Prevent text size adjustment on iOS */
+  -webkit-text-size-adjust: 100%;
+  /* Smooth scrolling on mobile */
+  scroll-behavior: smooth;
+}
+
+body {
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior-y: contain;
+  /* Optimize font rendering */
+  text-rendering: optimizeLegibility;
+}
+
+/* ✅ Mobile Performance: Optimize images */
+img {
+  /* Prevent layout shift */
+  max-width: 100%;
+  height: auto;
+  /* Lazy load images */
+  loading: lazy;
+  /* Optimize image rendering */
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* ✅ Mobile Performance: Optimize animations for mobile */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ✅ Responsive checkbox sizing */
+input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  cursor: pointer;
+}
+
+@media (min-width: 768px) {
+  input[type="checkbox"] {
+    width: 12px !important;
+    height: 12px !important;
+    min-width: 12px !important;
+    min-height: 12px !important;
+  }
+}
+
+/* ✅ Mobile Performance: Optimize touch targets */
+button,
+a,
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  /* Ensure minimum touch target size (44x44px recommended) */
+  min-height: 44px;
+  min-width: 44px;
+  /* Remove tap highlight on mobile */
+  -webkit-tap-highlight-color: transparent;
+  /* Improve touch responsiveness */
+  touch-action: manipulation;
+}
 
 @theme {
   --color-bg: var(--user-bg, #f9fafb);
@@ -144,4 +221,48 @@ html { scroll-behavior: smooth; }
 }
 .animate-indeterminate-bar {
   animation: indeterminate-bar 1400ms ease-in-out infinite;
+}
+
+/* ✅ Fix dropdown option styling for glass theme */
+:root,
+[data-theme="glass"] {
+  /* Ensure select dropdown options are visible in glass theme */
+}
+
+:root select option,
+[data-theme="glass"] select option {
+  background-color: #1f2937 !important; /* Dark background for glass theme */
+  color: #ffffff !important; /* White text */
+}
+
+:root select option:hover,
+[data-theme="glass"] select option:hover,
+:root select option:checked,
+[data-theme="glass"] select option:checked {
+  background-color: #374151 !important; /* Slightly lighter on hover/selected */
+  color: #ffffff !important;
+}
+
+/* Light theme - options should have light background */
+[data-theme="light"] select option {
+  background-color: #ffffff !important;
+  color: #030712 !important;
+}
+
+[data-theme="light"] select option:hover,
+[data-theme="light"] select option:checked {
+  background-color: #f3f4f6 !important;
+  color: #030712 !important;
+}
+
+/* Dark theme - options should match dark theme */
+[data-theme="dark"] select option {
+  background-color: #1f2937 !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] select option:hover,
+[data-theme="dark"] select option:checked {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
 }

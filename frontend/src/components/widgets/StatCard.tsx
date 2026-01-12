@@ -316,15 +316,15 @@ export default function StatCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-2 md:gap-3">
         <Pill
-          icon={<ArrowUpRightIcon className="h-4 w-4" />}
+          icon={<ArrowUpRightIcon className="h-3 w-3 md:h-4 md:w-4" />}
           label="Income"
           value={formatMoney(income)}
           kind="positive"
         />
         <Pill
-          icon={<ArrowDownRightIcon className="h-4 w-4" />}
+          icon={<ArrowDownRightIcon className="h-3 w-3 md:h-4 md:w-4" />}
           label="Expense"
           value={formatMoney(expense)}
           kind="negative"

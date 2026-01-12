@@ -152,18 +152,36 @@ export default function Settings() {
 
         <section>
           <h2 className="text-lg font-medium text-[var(--text-primary)] mb-4">
-            Other Settings
+            Dashboard Settings
           </h2>
-          <Link
-            to="/settings/categories"
-            className="block p-4 rounded-xl bg-[var(--widget-bg)] border border-[var(--widget-border)] hover:border-[var(--text-muted)] transition text-[var(--text-primary)]"
-            style={{
-              backdropFilter: "var(--widget-blur)",
-              WebkitBackdropFilter: "var(--widget-blur)",
-            }}
-          >
-            Manage Categories
-          </Link>
+          <div className="grid gap-4">
+            <Link
+              to="/settings/widgets"
+              className="block p-4 rounded-xl bg-[var(--widget-bg)] border border-[var(--widget-border)] hover:border-[var(--text-muted)] transition text-[var(--text-primary)]"
+              style={{
+                backdropFilter: "var(--widget-blur)",
+                WebkitBackdropFilter: "var(--widget-blur)",
+              }}
+            >
+              <div className="font-medium mb-1">Manage Widgets</div>
+              <div className="text-sm text-[var(--text-secondary)]">
+                Add or remove widgets from your dashboard
+              </div>
+            </Link>
+            <Link
+              to="/settings/categories"
+              className="block p-4 rounded-xl bg-[var(--widget-bg)] border border-[var(--widget-border)] hover:border-[var(--text-muted)] transition text-[var(--text-primary)]"
+              style={{
+                backdropFilter: "var(--widget-blur)",
+                WebkitBackdropFilter: "var(--widget-blur)",
+              }}
+            >
+              <div className="font-medium mb-1">Manage Categories</div>
+              <div className="text-sm text-[var(--text-secondary)]">
+                Customize transaction categories
+              </div>
+            </Link>
+          </div>
         </section>
       </div>
     </div>

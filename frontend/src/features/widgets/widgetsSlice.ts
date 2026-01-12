@@ -180,8 +180,14 @@ const widgetsSlice = createSlice({
       const id = action.payload.id ?? genId();
       const title = action.payload.title ?? action.payload.type;
       const size: WidgetSize = action.payload.size ?? "sm";
+      
+      // Only add to order if not already present
+      if (!state.order.includes(id)) {
+        state.order.push(id);
+      }
+      
+      // Update or create widget
       state.byId[id] = { id, type: action.payload.type, title, size };
-      state.order.push(id);
     },
     renameWidget: (state, action: PayloadAction<{ id: string; title: string }>) => {
       const w = state.byId[action.payload.id];

@@ -358,14 +358,14 @@ export default function TransactionsListWidget() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => openCategoryModal(selectedIds)}
-                className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 transition touch-manipulation min-h-[36px]"
+                className="rounded-lg bg-emerald-500/20 px-3 py-1.5 md:px-2 md:py-1 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 transition touch-manipulation min-h-[36px] md:min-h-0 text-xs md:text-xs"
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
               >
                 Set Category
               </button>
               <button
                 onClick={clearSelection}
-                className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[36px]"
+                className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 md:px-2 md:py-1 ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[36px] md:min-h-0 text-xs md:text-xs"
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
               >
                 Clear
@@ -705,7 +705,7 @@ export default function TransactionsListWidget() {
                       }
                     }}
                     placeholder="Category name..."
-                    className="flex-1 px-4 py-2 rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)] touch-manipulation min-h-[44px]"
+                    className="flex-1 px-4 py-2 md:px-3 md:py-1.5 rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)] touch-manipulation min-h-[44px] md:min-h-0"
                     style={{ touchAction: "manipulation" }}
                     autoFocus
                   />
@@ -716,7 +716,7 @@ export default function TransactionsListWidget() {
                       }
                     }}
                     disabled={!newCategoryName.trim()}
-                    className="px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition touch-manipulation min-h-[44px] min-w-[80px]"
+                    className="px-4 py-2 md:px-3 md:py-1.5 rounded-lg bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition touch-manipulation min-h-[44px] md:min-h-0 min-w-[80px] md:min-w-0"
                     style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
                   >
                     Create
@@ -733,7 +733,7 @@ export default function TransactionsListWidget() {
                   setPendingIds([]);
                   setNewCategoryName("");
                 }}
-                className="px-4 py-2 rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] text-[var(--text-primary)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[44px]"
+                className="px-4 py-2 md:px-3 md:py-1.5 rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] text-[var(--text-primary)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[44px] md:min-h-0"
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
               >
                 Cancel

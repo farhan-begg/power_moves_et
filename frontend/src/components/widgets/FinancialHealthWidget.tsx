@@ -223,11 +223,11 @@ export default function FinancialHealthWidget() {
   };
 
   return (
-    <GlassCard className="p-6">
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Financial Health Score</h3>
-        <div className="flex items-center gap-4">
-          <div className={`text-4xl font-bold ${getStatusColor(overallStatus).split(" ")[0]}`}>
+    <GlassCard className="p-4 md:p-6">
+      <div className="mb-4 md:mb-6">
+        <h3 className="text-base md:text-lg font-semibold text-[var(--text-primary)] mb-2">Financial Health Score</h3>
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className={`text-3xl md:text-4xl font-bold ${getStatusColor(overallStatus).split(" ")[0]}`}>
             {overallScore}
           </div>
           <div>
@@ -255,12 +255,12 @@ export default function FinancialHealthWidget() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className="rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] p-3"
+            className="rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] p-2 md:p-3"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2 md:gap-3">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-[var(--text-primary)]">{metric.name}</span>
+                  <span className="text-xs md:text-sm font-medium text-[var(--text-primary)]">{metric.name}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(metric.status)}`}>
                     {metric.score}/100
                   </span>

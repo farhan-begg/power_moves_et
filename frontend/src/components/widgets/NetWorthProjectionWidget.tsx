@@ -277,13 +277,13 @@ export default function NetWorthProjectionWidget() {
           </div>
         </div>
 
-        {/* Preset buttons */}
+        {/* Preset buttons - ✅ Desktop: Smaller, Mobile: Touch-friendly */}
         <div className="flex flex-wrap gap-2">
           {(["30d", "90d", "ytd", "1y", "all"] as Preset[]).map((p) => (
             <button
               key={p}
               onClick={() => setPreset(p)}
-              className={`text-xs rounded-lg px-3 py-1.5 ring-1 transition-colors ${
+              className={`text-xs rounded-lg px-3 py-1.5 md:px-2 md:py-1 ring-1 transition-colors min-h-[36px] md:min-h-0 ${
                 preset === p
                   ? "bg-[var(--btn-hover)] text-[var(--text-primary)] ring-[var(--widget-ring)]"
                   : "bg-[var(--btn-bg)] text-[var(--text-secondary)] ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
@@ -497,7 +497,7 @@ export default function NetWorthProjectionWidget() {
 
           {/* Projection Controls */}
           <div className="border-t border-[var(--widget-border)] pt-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
               <div>
                 <h4 className="text-sm font-medium text-[var(--text-primary)]">
                   Expense Reduction Projection
@@ -506,7 +506,8 @@ export default function NetWorthProjectionWidget() {
                   Adjust expenses by category to see projected net worth
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              {/* ✅ Desktop: Show projection controls always, Mobile: Hide when not active */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs text-[var(--text-secondary)] flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -514,53 +515,53 @@ export default function NetWorthProjectionWidget() {
                     onChange={(e) => setShowProjection(e.target.checked)}
                     className="rounded border-[var(--widget-border)]"
                   />
-                  Show Projection
+                  <span className="hidden sm:inline">Show Projection</span>
+                  <span className="sm:hidden">Projection</span>
                 </label>
-                {showProjection && (
-                  <>
-                    <select
-                      value={projectionMonths}
-                      onChange={(e) =>
-                        setProjectionMonths(Number(e.target.value))
-                      }
-                      className="text-xs rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] px-2 py-1 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)]"
+                {/* ✅ Desktop: Always show controls, Mobile: Only when projection is active */}
+                <div className={`flex items-center gap-2 ${showProjection ? 'flex' : 'hidden md:flex'}`}>
+                  <select
+                    value={projectionMonths}
+                    onChange={(e) =>
+                      setProjectionMonths(Number(e.target.value))
+                    }
+                    className="text-xs rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] px-2 py-1 md:py-0.5 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] min-h-[36px] md:min-h-0"
+                  >
+                    <option value={3}>3 months</option>
+                    <option value={6}>6 months</option>
+                    <option value={12}>12 months</option>
+                    <option value={24}>24 months</option>
+                  </select>
+                  {hasAdjustments && (
+                    <button
+                      onClick={resetProjection}
+                      className="text-xs rounded-lg bg-[var(--btn-bg)] px-2 py-1 md:py-0.5 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)] min-h-[36px] md:min-h-0 transition-colors"
                     >
-                      <option value={3}>3 months</option>
-                      <option value={6}>6 months</option>
-                      <option value={12}>12 months</option>
-                      <option value={24}>24 months</option>
-                    </select>
-                    {hasAdjustments && (
-                      <button
-                        onClick={resetProjection}
-                        className="text-xs rounded-lg bg-[var(--btn-bg)] px-2 py-1 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </>
-                )}
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {showProjection && (
-              <>
-                {totalMonthlySavings > 0 && (
+            {/* ✅ Desktop: Show projection checklist always when enabled, Mobile: Only when active */}
+            <div className={`${showProjection ? 'block' : 'hidden md:block'}`}>
+              {totalMonthlySavings > 0 && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="mb-3 rounded-lg bg-gradient-to-r from-[var(--positive-bg-soft)] to-[var(--positive-bg-soft)]/50 p-3 border border-[var(--positive-ring)]"
+                    className="mb-3 rounded-lg bg-gradient-to-r from-[var(--positive-bg-soft)] to-[var(--positive-bg-soft)]/50 p-2 md:p-3 border border-[var(--positive-ring)]"
                   >
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs text-[var(--text-muted)] mb-0.5">Your Monthly Savings</div>
-                        <div className="text-lg font-bold text-[var(--positive)]">
+                        <div className="text-base md:text-lg font-bold text-[var(--positive)]">
                           {currency.format(totalMonthlySavings)}
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-[var(--text-muted)] mb-0.5">Yearly Impact</div>
-                        <div className="text-lg font-bold text-[var(--positive)]">
+                        <div className="text-base md:text-lg font-bold text-[var(--positive)]">
                           {currency.format(totalMonthlySavings * 12)}
                         </div>
                       </div>
@@ -569,16 +570,16 @@ export default function NetWorthProjectionWidget() {
                 )}
 
                 {categories.length > 0 && (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2 max-h-48 md:max-h-64 overflow-y-auto">
                     {categories.slice(0, 10).map((cat) => {
                       const adjustment = categoryAdjustments[cat.category] || 0;
                       return (
                         <div
                           key={cat.category}
-                          className="flex items-center justify-between gap-2 text-sm"
+                          className="flex items-center justify-between gap-2 text-sm p-1 md:p-0"
                         >
                           <div className="flex-1 min-w-0">
-                            <div className="text-[var(--text-primary)] truncate">
+                            <div className="text-[var(--text-primary)] truncate text-xs md:text-sm">
                               {cat.category || "Uncategorized"}
                             </div>
                             <div className="text-xs text-[var(--text-muted)]">
@@ -599,9 +600,9 @@ export default function NetWorthProjectionWidget() {
                                 )
                               }
                               placeholder="0"
-                              className="w-20 text-xs rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] px-2 py-1 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)]"
+                              className="w-16 md:w-20 text-xs rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] px-2 py-1 md:py-0.5 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] min-h-[36px] md:min-h-0"
                             />
-                            <span className="text-xs text-[var(--text-muted)] w-12 text-right">
+                            <span className="text-xs text-[var(--text-muted)] w-10 md:w-12 text-right">
                               {currency.format(adjustment)}
                             </span>
                           </div>
@@ -610,8 +611,7 @@ export default function NetWorthProjectionWidget() {
                     })}
                   </div>
                 )}
-              </>
-            )}
+            </div>
           </div>
         </>
       )}
@@ -637,7 +637,7 @@ export default function NetWorthProjectionWidget() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.3 + idx * 0.1 }}
-                  className="rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] p-3 hover:bg-[var(--btn-hover)] transition-colors cursor-pointer"
+                  className="rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] p-2 md:p-3 hover:bg-[var(--btn-hover)] transition-colors cursor-pointer"
                   onClick={() => {
                     if (insight.type === "reduce" && insight.category) {
                       const cat = categories.find(c => c.category === insight.category);
