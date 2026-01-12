@@ -9,6 +9,13 @@ if (!["sandbox", "development", "production"].includes(env)) {
   console.warn(`⚠️ Invalid PLAID_ENV "${env}", defaulting to sandbox`);
 }
 
+// Log current environment for debugging
+console.log(`📦 Plaid Environment: ${env}`);
+if (env === "sandbox") {
+  console.log(`⚠️ Note: Some banks (like Bank of America) may have limited support in sandbox mode.`);
+  console.log(`   Consider switching to "development" or "production" for full bank support.`);
+}
+
 if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
   throw new Error("❌ Missing Plaid credentials in environment variables");
 }

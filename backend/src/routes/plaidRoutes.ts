@@ -101,22 +101,47 @@ router.post("/link-token", protect, async (req: AuthRequest, res: Response) => {
       access_token = ctx.accessToken;
     }
 
-    const { data } = await plaidClient.linkTokenCreate({
+    // Build products array - only include Investments if explicitly enabled
+    const products = [Products.Transactions];
+    if (process.env.PLAID_ENABLE_INVESTMENTS === "true") {
+      products.push(Products.Investments);
+    }
+
+    const linkTokenConfig: any = {
       user: { client_user_id: String(req.user) },
       client_name: "Expense Tracker",
-      products: [Products.Transactions, Products.Investments],
+      products,
       country_codes: [CountryCode.Us],
       language: "en",
-      webhook: process.env.PLAID_WEBHOOK_URL,
       ...(access_token ? { access_token } : {}),
-    });
+    };
+
+    // Add webhook if configured
+    if (process.env.PLAID_WEBHOOK_URL) {
+      linkTokenConfig.webhook = process.env.PLAID_WEBHOOK_URL;
+    }
+
+    const { data } = await plaidClient.linkTokenCreate(linkTokenConfig);
 
     return res.json({ link_token: data.link_token });
   } catch (err: any) {
-    console.error("❌ /link-token error:", err.response?.data || err.message || err);
+    const plaidError = err.response?.data;
+    console.error("❌ /link-token error:", plaidError || err.message || err);
+    
+    // Provide more helpful error messages for common issues
+    let errorMessage = "Failed to create link token";
+    if (plaidError?.error_code === "INVALID_PRODUCT") {
+      errorMessage = "Invalid product configuration. Some banks may not support all products.";
+    } else if (plaidError?.error_code === "INVALID_INSTITUTION") {
+      errorMessage = "This institution may not be available in your current Plaid environment.";
+    } else if (plaidError?.error_message) {
+      errorMessage = plaidError.error_message;
+    }
+    
     return res.status(500).json({
-      error: "Failed to create link token",
-      details: err.response?.data,
+      error: errorMessage,
+      error_code: plaidError?.error_code,
+      details: plaidError,
     });
   }
 });
