@@ -1,7 +1,7 @@
 // src/components/dashboard/PlaidLinkedGate.tsx
 import React, { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
 import { RootState, AppDispatch } from "../../app/store";
@@ -29,6 +29,7 @@ const clearAuthData = () => {
 export default function PlaidLinkedGate({ children }: { children: React.ReactNode }) {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const reduxToken = useSelector((s: RootState) => s.auth.token);
   const token = reduxToken || localStorage.getItem("token") || null;
 
@@ -62,9 +63,18 @@ export default function PlaidLinkedGate({ children }: { children: React.ReactNod
     return <LogoLoader show />;
   }
 
-  // ✅ Not linked => show link screen
+  // ✅ Not linked => show link screen (force connection before dashboard)
   if ((data as any).banksConnected === 0) {
-    return <PlaidAutoLink onSuccess={() => {}} />;
+    return (
+      <PlaidAutoLink
+        onSuccess={async () => {
+          // Invalidate queries to refresh userInfo and show dashboard
+          await queryClient.invalidateQueries({ queryKey: ["userInfo"] });
+          await queryClient.invalidateQueries({ queryKey: ["plaid", "items"] });
+          // The component will re-render and check banksConnected again
+        }}
+      />
+    );
   }
 
   // ✅ Linked => render dashboard

@@ -143,6 +143,30 @@ export default function TransactionsListWidget() {
     return undefined;
   };
 
+  // Preset spending categories based on CategoryIcons KEYMAP
+  const presetCategories = React.useMemo(() => {
+    return [
+      { name: "Groceries", icon: "grocery", color: DEFAULT_COLORS.groceries },
+      { name: "Restaurants", icon: "restaurant", color: DEFAULT_COLORS.restaurants },
+      { name: "Coffee", icon: "coffee", color: DEFAULT_COLORS.coffee },
+      { name: "Transport", icon: "transport", color: DEFAULT_COLORS.transport },
+      { name: "Gas", icon: "gas", color: DEFAULT_COLORS.transport },
+      { name: "Travel", icon: "travel", color: DEFAULT_COLORS.travel },
+      { name: "Rent", icon: "rent", color: DEFAULT_COLORS.rent },
+      { name: "Utilities", icon: "utility", color: DEFAULT_COLORS.utilities },
+      { name: "Shopping", icon: "shopping", color: DEFAULT_COLORS.shopping },
+      { name: "Subscriptions", icon: "subscription", color: DEFAULT_COLORS.subscriptions },
+      { name: "Healthcare", icon: "health", color: DEFAULT_COLORS.healthcare },
+      { name: "Gym", icon: "gym", color: DEFAULT_COLORS.healthcare },
+      { name: "Entertainment", icon: "entertainment", color: DEFAULT_COLORS.entertainment },
+      { name: "Education", icon: "education", color: "#6366f1" },
+      { name: "Insurance", icon: "insurance", color: "#6366f1" },
+      { name: "Services", icon: "service", color: "#6366f1" },
+      { name: "Loan Payment", icon: "loan", color: "#ef4444" },
+      { name: "Savings", icon: "savings", color: DEFAULT_COLORS.savings },
+    ];
+  }, []);
+
   const colorForCategory = (name?: string) => {
     if (!name) return undefined;
     const dbHex = catByName.get(norm(name))?.color;
@@ -239,14 +263,25 @@ export default function TransactionsListWidget() {
   const toggleRow = (id: string) => setSelected((m) => ({ ...m, [id]: !m[id] }));
   const clearSelection = () => setSelected({});
 
-  const doCategorize = async (ids: string[]) => {
-    if (ids.length === 0) return;
-    const name = prompt("Set category name:");
-    if (!name || !name.trim()) return;
-    await bulkCategorize(token!, { ids, categoryName: name.trim() });
+  const [showCategoryModal, setShowCategoryModal] = React.useState(false);
+  const [pendingIds, setPendingIds] = React.useState<string[]>([]);
+  const [newCategoryName, setNewCategoryName] = React.useState("");
+
+  const doCategorize = async (ids: string[], categoryName: string) => {
+    if (ids.length === 0 || !categoryName.trim()) return;
+    await bulkCategorize(token!, { ids, categoryName: categoryName.trim() });
     clearSelection();
+    setShowCategoryModal(false);
+    setPendingIds([]);
+    setNewCategoryName("");
     qc.invalidateQueries({ queryKey: ["transactions"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
+    qc.invalidateQueries({ queryKey: ["categories"] });
+  };
+
+  const openCategoryModal = (ids: string[]) => {
+    setPendingIds(ids);
+    setShowCategoryModal(true);
   };
 
   const clickTimerRef = clickTimer; // alias to satisfy TS in handlers
@@ -263,7 +298,7 @@ export default function TransactionsListWidget() {
     if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
     dblGuard.current = true;
     const ids = selectedIds.length > 0 ? selectedIds : [id];
-    void doCategorize(ids);
+    openCategoryModal(ids);
   };
 
   // small recurring chips
@@ -315,17 +350,27 @@ export default function TransactionsListWidget() {
       {/* selection bar */}
       {selectedIds.length > 0 && (
         <div className="sticky top-0 z-10 mb-3 rounded-xl border border-[var(--widget-border)] bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] backdrop-blur-md ring-1 ring-[var(--widget-ring)]">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
             <div>
               <span className="font-medium">{selectedIds.length}</span> selected —{" "}
               <span className="text-[var(--text-secondary)]">double-click any selected row to set a category</span>
             </div>
-            <button
-              onClick={clearSelection}
-              className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
-            >
-              Clear
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openCategoryModal(selectedIds)}
+                className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 transition touch-manipulation min-h-[36px]"
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+              >
+                Set Category
+              </button>
+              <button
+                onClick={clearSelection}
+                className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[36px]"
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -544,6 +589,158 @@ export default function TransactionsListWidget() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Category Selection Modal */}
+      {showCategoryModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => {
+            setShowCategoryModal(false);
+            setPendingIds([]);
+            setNewCategoryName("");
+          }}
+        >
+          <div
+            className="relative w-full max-w-md max-h-[80vh] rounded-2xl bg-[var(--widget-bg)] border border-[var(--widget-border)] shadow-2xl ring-1 ring-[var(--widget-ring)] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-4 sm:px-6 py-4 border-b border-[var(--divider)]">
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                Select Category ({pendingIds.length} transaction{pendingIds.length !== 1 ? "s" : ""})
+              </h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                Choose a category or create a new one
+              </p>
+            </div>
+
+            {/* Category List */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+              {/* Preset Categories */}
+              <div className="mb-6">
+                <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Quick Select</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {presetCategories.map((preset) => {
+                    const presetColor = preset.color || colorForCategory(preset.name);
+                    return (
+                      <button
+                        key={preset.name}
+                        onClick={() => doCategorize(pendingIds, preset.name)}
+                        className="flex flex-col items-center gap-2 px-3 py-3 rounded-lg border border-[var(--widget-border)] bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[80px]"
+                        style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                      >
+                        <span
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full shrink-0"
+                          style={
+                            presetColor
+                              ? { border: `1px solid ${presetColor}`, backgroundColor: hexToRgba(presetColor, 0.14) }
+                              : { border: "1px solid rgba(255,255,255,0.15)" }
+                          }
+                        >
+                          <CategoryIcon
+                            category={preset.name}
+                            className="h-6 w-6"
+                            color={presetColor}
+                          />
+                        </span>
+                        <span className="text-xs font-medium text-[var(--text-primary)] text-center leading-tight">
+                          {preset.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Existing Categories */}
+              {(categories ?? []).length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Your Categories</h4>
+                  <div className="space-y-2">
+                    {(categories ?? []).map((cat) => {
+                      const catColor = cat.color && HEX.test(cat.color) ? cat.color : colorForCategory(cat.name);
+                      return (
+                        <button
+                          key={cat._id}
+                          onClick={() => doCategorize(pendingIds, cat.name)}
+                          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-[var(--widget-border)] bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] transition text-left touch-manipulation min-h-[52px]"
+                          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                        >
+                          <span
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full shrink-0"
+                            style={
+                              catColor
+                                ? { border: `1px solid ${catColor}`, backgroundColor: hexToRgba(catColor, 0.14) }
+                                : { border: "1px solid rgba(255,255,255,0.15)" }
+                            }
+                          >
+                            <CategoryIcon
+                              category={cat.name}
+                              className="h-5 w-5"
+                              color={catColor}
+                            />
+                          </span>
+                          <span className="flex-1 font-medium text-[var(--text-primary)]">{cat.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Create New Category */}
+              <div className="border-t border-[var(--divider)] pt-4">
+                <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+                  Create New Category
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newCategoryName.trim()) {
+                        doCategorize(pendingIds, newCategoryName.trim());
+                      }
+                    }}
+                    placeholder="Category name..."
+                    className="flex-1 px-4 py-2 rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)] touch-manipulation min-h-[44px]"
+                    style={{ touchAction: "manipulation" }}
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => {
+                      if (newCategoryName.trim()) {
+                        doCategorize(pendingIds, newCategoryName.trim());
+                      }
+                    }}
+                    disabled={!newCategoryName.trim()}
+                    className="px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition touch-manipulation min-h-[44px] min-w-[80px]"
+                    style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 sm:px-6 py-4 border-t border-[var(--divider)] flex justify-end">
+              <button
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setPendingIds([]);
+                  setNewCategoryName("");
+                }}
+                className="px-4 py-2 rounded-lg bg-[var(--btn-bg)] border border-[var(--widget-border)] text-[var(--text-primary)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[44px]"
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

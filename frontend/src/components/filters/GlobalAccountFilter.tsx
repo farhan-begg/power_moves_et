@@ -142,44 +142,76 @@ export default function GlobalAccountFilter() {
   };
 
   return (
-    <div className="inline-flex items-center gap-3">
-      <label className="text-sm font-medium text-[var(--text-secondary)]">Bank</label>
-      <select
-        value={selectedItemId}
-        onChange={onBankChange}
-        className="
-          px-4 py-2 text-sm sm:text-base font-medium
-          bg-[var(--btn-bg)] backdrop-blur-md rounded-lg text-[var(--text-primary)] shadow-md
-          border border-[var(--widget-border)]
-          focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]
-          hover:bg-[var(--btn-hover)] transition
-        "
-      >
-        {bankOptions.map((o) => (
-          <option key={o.id} value={o.id} className="bg-[var(--widget-bg)] text-[var(--text-primary)]">
-            {o.label}
-          </option>
-        ))}
-      </select>
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 w-full sm:w-auto">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial min-w-0">
+        <label className="text-xs sm:text-sm font-medium text-[var(--text-secondary)] whitespace-nowrap sm:shrink-0">
+          Bank
+        </label>
+        <select
+          value={selectedItemId}
+          onChange={onBankChange}
+          className="
+            w-full sm:w-auto sm:min-w-[140px]
+            px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base font-medium
+            bg-[var(--btn-bg)] backdrop-blur-md rounded-lg text-[var(--text-primary)] shadow-md
+            border border-[var(--widget-border)]
+            focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]
+            hover:bg-[var(--btn-hover)] active:bg-[var(--btn-hover)] transition
+            touch-manipulation min-h-[44px] appearance-none
+            cursor-pointer
+          "
+          style={{ 
+            touchAction: "manipulation", 
+            WebkitTapHighlightColor: "transparent",
+            backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")",
+            backgroundPosition: "right 0.5rem center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "1.5em 1.5em",
+            paddingRight: "2.5rem"
+          }}
+        >
+          {bankOptions.map((o) => (
+            <option key={o.id} value={o.id} className="bg-[var(--widget-bg)] text-[var(--text-primary)]">
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <label className="text-sm font-medium text-[var(--text-secondary)] ml-3">Account</label>
-      <select
-        value={selectedAccountId}
-        onChange={onAccountChange}
-        className="
-          px-4 py-2 text-sm sm:text-base font-medium
-          bg-[var(--btn-bg)] backdrop-blur-md rounded-lg text-[var(--text-primary)] shadow-md
-          border border-[var(--widget-border)]
-          focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]
-          hover:bg-[var(--btn-hover)] transition
-        "
-      >
-        {accountOptions.map((o) => (
-          <option key={o.id} value={o.id} className="bg-[var(--widget-bg)] text-[var(--text-primary)]">
-            {o.label}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial min-w-0">
+        <label className="text-xs sm:text-sm font-medium text-[var(--text-secondary)] whitespace-nowrap sm:shrink-0">
+          Account
+        </label>
+        <select
+          value={selectedAccountId}
+          onChange={onAccountChange}
+          className="
+            w-full sm:w-auto sm:min-w-[160px]
+            px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base font-medium
+            bg-[var(--btn-bg)] backdrop-blur-md rounded-lg text-[var(--text-primary)] shadow-md
+            border border-[var(--widget-border)]
+            focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]
+            hover:bg-[var(--btn-hover)] active:bg-[var(--btn-hover)] transition
+            touch-manipulation min-h-[44px] appearance-none
+            cursor-pointer
+          "
+          style={{ 
+            touchAction: "manipulation", 
+            WebkitTapHighlightColor: "transparent",
+            backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")",
+            backgroundPosition: "right 0.5rem center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "1.5em 1.5em",
+            paddingRight: "2.5rem"
+          }}
+        >
+          {accountOptions.map((o) => (
+            <option key={o.id} value={o.id} className="bg-[var(--widget-bg)] text-[var(--text-primary)]">
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

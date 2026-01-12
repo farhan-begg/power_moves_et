@@ -184,10 +184,21 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
           type="button"
           onClick={connectFirstBank}
           disabled={busy}
-          className="px-5 py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
+          onTouchStart={(e) => {
+            if (!busy) {
+              e.currentTarget.style.opacity = "0.8";
+              e.currentTarget.style.transform = "scale(0.98)";
+            }
+          }}
+          onTouchEnd={(e) => {
+            e.currentTarget.style.opacity = "1";
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
                      backdrop-blur-md border border-[var(--widget-border)]
-                     bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-50
-                     ring-1 ring-[var(--widget-ring)]"
+                     bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] active:bg-[var(--btn-hover)] disabled:opacity-50
+                     ring-1 ring-[var(--widget-ring)] touch-manipulation min-h-[44px] text-sm sm:text-base"
+          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
         >
           {busy ? "Preparing…" : "Connect your first bank"}
         </button>
@@ -196,10 +207,21 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
           type="button"
           onClick={addAnotherBank}
           disabled={busy}
-          className="px-5 py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
+          onTouchStart={(e) => {
+            if (!busy) {
+              e.currentTarget.style.opacity = "0.8";
+              e.currentTarget.style.transform = "scale(0.98)";
+            }
+          }}
+          onTouchEnd={(e) => {
+            e.currentTarget.style.opacity = "1";
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
                      backdrop-blur-md border border-[var(--widget-border)]
-                     bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-50
-                     ring-1 ring-[var(--widget-ring)]"
+                     bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] active:bg-[var(--btn-hover)] disabled:opacity-50
+                     ring-1 ring-[var(--widget-ring)] touch-manipulation min-h-[44px] text-sm sm:text-base"
+          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
         >
           {busy ? "Preparing…" : "Add another bank"}
         </button>

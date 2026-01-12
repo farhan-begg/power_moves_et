@@ -286,31 +286,35 @@ export default function Dashboard() {
 
   return (
     <div
-      className="relative min-h-screen p-6"
+      className="relative min-h-screen p-4 sm:p-6"
       style={{
         background: `linear-gradient(to bottom right, var(--page-bg-from), var(--page-bg-to))`,
       }}
     >
       {showInitialLoader && <LogoLoader />}
 
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Your Dashboard</h1>
-        <p className="text-sm text-[var(--text-secondary)] max-w-2xl">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] mb-2">Your Dashboard</h1>
+        <p className="text-xs sm:text-sm text-[var(--text-secondary)] max-w-2xl">
           Start with your <strong>Financial Health Score</strong> and <strong>Action Items</strong> to see what needs attention, then explore your net worth and spending patterns.
         </p>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
-
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+        {/* Filters - Full width on mobile, auto on desktop */}
+        <div className="w-full sm:w-auto">
           <GlobalAccountFilter />
-
+        </div>
+        
+        {/* Action buttons - Row on all screens */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
           <ThemeToggle />
 
           <Link
             to="/settings"
-            className="p-2 rounded-md bg-[var(--btn-bg)] border border-[var(--btn-border)] hover:bg-[var(--btn-hover)] transition"
+            className="p-2 rounded-md bg-[var(--btn-bg)] border border-[var(--btn-border)] hover:bg-[var(--btn-hover)] transition touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="Settings"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             <Cog6ToothIcon className="w-5 h-5 text-[var(--text-primary)]" />
           </Link>
@@ -318,16 +322,18 @@ export default function Dashboard() {
           <button
             onClick={handleManualRefresh}
             disabled={!token || isSyncing}
-            className="p-2 rounded-md bg-[var(--btn-bg)] border border-[var(--btn-border)] hover:bg-[var(--btn-hover)] disabled:opacity-50 transition"
+            className="p-2 rounded-md bg-[var(--btn-bg)] border border-[var(--btn-border)] hover:bg-[var(--btn-hover)] disabled:opacity-50 transition touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="Sync latest transactions"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             <ArrowPathIcon className={`w-5 h-5 ${isSyncing ? "animate-spin text-blue-400" : "text-[var(--text-primary)]"}`} />
           </button>
 
           <button
             onClick={handleLogout}
-            className="p-2 rounded-md bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 transition"
+            className="p-2 rounded-md bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 transition touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="Logout"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
             <ArrowRightOnRectangleIcon className="w-5 h-5 text-red-400" />
           </button>
