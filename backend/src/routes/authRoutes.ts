@@ -105,8 +105,9 @@ router.post("/login", async (req, res) => {
           return;
         }
 
+        // ✅ Default to 730 days (2 years) for full historical data on first login sync
         const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 90);
+        startDate.setDate(startDate.getDate() - 730);
         const endDate = new Date();
 
         for (const item of items) {
@@ -119,18 +120,20 @@ router.post("/login", async (req, res) => {
 
             const accessToken = decrypt(encryptedToken);
 
-            // ✅ COST OPTIMIZATION: Use incremental sync on login
+            // ✅ COST OPTIMIZATION: Use incremental sync on login only if recently synced
             const itemDoc = await PlaidItem.findOne({ userId, itemId: (item as any).itemId });
             let loginStartDate = startDate;
             if (itemDoc?.lastGoodSyncAt) {
               const daysSinceLastSync = Math.floor(
                 (Date.now() - itemDoc.lastGoodSyncAt.getTime()) / (1000 * 60 * 60 * 24)
               );
-              // Only fetch last 7 days if synced recently, otherwise use full range
+              // Only use incremental sync if synced within last 7 days
+              // Otherwise fetch full historical range to ensure complete data
               if (daysSinceLastSync < 7) {
                 loginStartDate = new Date(itemDoc.lastGoodSyncAt);
                 loginStartDate.setDate(loginStartDate.getDate() - 1); // 1 day overlap
               }
+              // If daysSinceLastSync >= 7, use full 730 day range (loginStartDate already set)
             }
 
             // ✅ COST OPTIMIZATION: Properly paginate transactions

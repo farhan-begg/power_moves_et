@@ -562,10 +562,12 @@ router.get("/sync-status", protect, async (req: AuthRequest, res: Response) => {
   return res.json(status);
 });
 
-// POST /api/plaid/sync-transactions?days=90&itemId=optional
+// POST /api/plaid/sync-transactions?days=730&itemId=optional&forceFullSync=false
 router.post("/sync-transactions", protect, async (req: AuthRequest, res: Response) => {
   try {
-    const days = Math.max(1, Math.min(730, Number(req.query.days || 90)));
+    // ✅ Increased max days to 730 (2 years) and default to 730 for full historical data
+    const days = Math.max(1, Math.min(730, Number(req.query.days || 730)));
+    const forceFullSync = String(req.query.forceFullSync || "false") === "true";
     const userId = new mongoose.Types.ObjectId(String(req.user));
 
     const itemIdParam = req.query.itemId ? String(req.query.itemId) : null;
@@ -590,22 +592,24 @@ router.post("/sync-transactions", protect, async (req: AuthRequest, res: Respons
 
     const accessToken = decrypt(item.accessToken);
 
-    // ✅ COST OPTIMIZATION: Use incremental sync - only fetch since last sync
-    // If lastGoodSyncAt exists and is recent, only fetch from that date
+    // ✅ COST OPTIMIZATION: Use incremental sync only if not forcing full sync
+    // If forceFullSync=true or no lastGoodSyncAt, fetch full requested range
     let startDate = new Date();
-    if (item.lastGoodSyncAt) {
+    if (!forceFullSync && item.lastGoodSyncAt) {
       const daysSinceLastSync = Math.floor(
         (Date.now() - item.lastGoodSyncAt.getTime()) / (1000 * 60 * 60 * 24)
       );
-      // If last sync was less than requested days ago, use incremental sync
-      if (daysSinceLastSync < days) {
+      // Only use incremental sync if last sync was recent AND less than requested days
+      // This ensures user gets their requested historical range when needed
+      if (daysSinceLastSync < 7 && daysSinceLastSync < days) {
         startDate = new Date(item.lastGoodSyncAt);
         startDate.setDate(startDate.getDate() - 1); // Fetch 1 day overlap to catch edge cases
       } else {
+        // Last sync was old or user wants more data - use full requested range
         startDate.setDate(startDate.getDate() - days);
       }
     } else {
-      // First sync - use full range
+      // First sync or forceFullSync=true - use full requested range
       startDate.setDate(startDate.getDate() - days);
     }
     const endDate = new Date();
@@ -738,12 +742,14 @@ router.post("/sync-transactions", protect, async (req: AuthRequest, res: Respons
 });
 
 // POST /api/plaid/sync-if-needed
-// body: { force?: boolean, days?: number }
+// body: { force?: boolean, days?: number, forceFullSync?: boolean }
 router.post("/sync-if-needed", protect, async (req: AuthRequest, res: Response) => {
   try {
     const userId = new mongoose.Types.ObjectId(String(req.user));
     const force = Boolean(req.body?.force);
-    const days = Math.max(1, Math.min(730, Number(req.body?.days || 90)));
+    const forceFullSync = Boolean(req.body?.forceFullSync);
+    // ✅ Default to 730 days (2 years) for full historical data
+    const days = Math.max(1, Math.min(730, Number(req.body?.days || 730)));
 
     const status = await getUserSyncStatus(userId);
 
@@ -789,21 +795,22 @@ router.post("/sync-if-needed", protect, async (req: AuthRequest, res: Response) 
       try {
         const accessToken = decrypt(item.accessToken);
 
-        // ✅ COST OPTIMIZATION: Use incremental sync - only fetch since last sync
+        // ✅ COST OPTIMIZATION: Use incremental sync only if not forcing full sync
         let startDate = new Date();
-        if (item.lastGoodSyncAt) {
+        if (!forceFullSync && item.lastGoodSyncAt) {
           const daysSinceLastSync = Math.floor(
             (Date.now() - item.lastGoodSyncAt.getTime()) / (1000 * 60 * 60 * 24)
           );
-          // If last sync was less than requested days ago, use incremental sync
-          if (daysSinceLastSync < days) {
+          // Only use incremental sync if last sync was recent AND less than requested days
+          if (daysSinceLastSync < 7 && daysSinceLastSync < days) {
             startDate = new Date(item.lastGoodSyncAt);
             startDate.setDate(startDate.getDate() - 1); // Fetch 1 day overlap to catch edge cases
           } else {
+            // Last sync was old or user wants more data - use full requested range
             startDate.setDate(startDate.getDate() - days);
           }
         } else {
-          // First sync - use full range
+          // First sync or forceFullSync=true - use full requested range
           startDate.setDate(startDate.getDate() - days);
         }
         const endDate = new Date();

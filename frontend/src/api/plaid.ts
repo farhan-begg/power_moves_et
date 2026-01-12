@@ -196,7 +196,7 @@ export async function fetchSyncStatus(token: string): Promise<SyncStatus> {
 
 export async function triggerSyncIfNeeded(
   token: string,
-  opts?: { force?: boolean; days?: number }
+  opts?: { force?: boolean; days?: number; forceFullSync?: boolean }
 ): Promise<{
   triggered: boolean;
   alreadyRunning?: boolean;
@@ -207,7 +207,8 @@ export async function triggerSyncIfNeeded(
     "/plaid/sync-if-needed",
     {
       force: opts?.force ?? false,
-      days: opts?.days ?? 90,
+      days: opts?.days ?? 730, // ✅ Default to 730 days (2 years) for full historical data
+      forceFullSync: opts?.forceFullSync ?? false, // Allow forcing full sync even if recently synced
     },
     auth(token)
   );

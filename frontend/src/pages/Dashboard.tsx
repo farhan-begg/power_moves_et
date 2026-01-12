@@ -127,7 +127,11 @@ export default function Dashboard() {
     if (!token) return;
     setShowInitialLoader(true);
     try {
-      const res = await triggerSyncIfNeeded(token);
+      // ✅ Request full historical data (730 days) on initial sync
+      const res = await triggerSyncIfNeeded(token, { 
+        days: 730, 
+        forceFullSync: true // Force full sync to get all historical data
+      });
       // If a sync was triggered or is already running, poll until ready
       if (res.triggered || res.status.isSyncing || !res.status.hasAnyTransactions) {
         await pollUntilReady();
@@ -160,7 +164,12 @@ export default function Dashboard() {
     if (!token || isSyncing) return;
     try {
       setIsSyncing(true);
-      await triggerSyncIfNeeded(token, { force: true });
+      // ✅ Request full historical data on manual refresh
+      await triggerSyncIfNeeded(token, { 
+        force: true, 
+        days: 730,
+        forceFullSync: true // Force full sync to ensure all data is fetched
+      });
       await pollUntilReady();
       await invalidateFinanceQueries();
     } catch (e) {

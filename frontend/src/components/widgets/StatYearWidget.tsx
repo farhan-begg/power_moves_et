@@ -1,6 +1,8 @@
 import React from "react";
 import StatCard from "./StatCard";
-import { rangeYearISO } from "./_utils";
+import { toLocalYMDRange } from "../../helpers/date";
 export default function StatYearWidget() {
-  return<StatCard title="Net Worth" range={rangeYearISO()} mode="networth" />
+  // ✅ YTD should be Jan 1 to today, not Jan 1 to Dec 31
+  const ytdRange = toLocalYMDRange("ytd");
+  return <StatCard title="Year to Date" range={ytdRange} mode="cashflow" />;
 }
