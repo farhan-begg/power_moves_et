@@ -293,10 +293,14 @@ export default function Dashboard() {
     >
       {showInitialLoader && <LogoLoader />}
 
-      <h1 className="text-2xl font-semibold mb-4 text-[var(--text-primary)]">Your Dashboard</h1>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Your Dashboard</h1>
+        <p className="text-sm text-[var(--text-secondary)] max-w-2xl">
+          Start with your <strong>Financial Health Score</strong> and <strong>Action Items</strong> to see what needs attention, then explore your net worth and spending patterns.
+        </p>
+      </div>
 
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">Overview</h2>
 
         <div className="flex items-center gap-3">
           <GlobalAccountFilter />

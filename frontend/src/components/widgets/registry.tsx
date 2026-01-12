@@ -19,6 +19,8 @@ import CategoryPieWidget from "./CategoryPieWidget";
 import UpcomingBillsWidget from "./UpcomingBillsWidget";
 // import CryptoPortfolioWidget from "./CryptoPortfolioWidget"; // TODO: Fix widget
 import NetWorthProjectionWidget from "./NetWorthProjectionWidget";
+import FinancialHealthWidget from "./FinancialHealthWidget";
+import ActionItemsWidget from "./ActionItemsWidget";
 import PlaceholderWidget from "./PlaceholderWidget";
 
 export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
@@ -40,4 +42,6 @@ export const widgetRenderer: Record<WidgetType, React.ComponentType> = {
   "upcoming-bills": UpcomingBillsWidget,
   "crypto-portfolio": () => <PlaceholderWidget title="Crypto Portfolio" />, // TODO: Fix widget
   "net-worth-projection": NetWorthProjectionWidget,
+  "financial-health": FinancialHealthWidget,
+  "action-items": ActionItemsWidget,
 };

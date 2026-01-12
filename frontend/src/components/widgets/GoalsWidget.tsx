@@ -13,6 +13,8 @@ import {
   rolloverGoal,
   type Goal,
 } from "../../api/goals";
+import { fetchSummary } from "../../api/transaction";
+import { fetchNetWorth } from "../../api/plaid";
 import {
   ArrowPathIcon,
   PlusIcon,
@@ -45,6 +47,45 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
     enabled: !!token,
     staleTime: 60_000,
   });
+
+  // Get monthly expenses for emergency fund calculation
+  const { data: summary } = useQuery({
+    queryKey: ["summary", "month"],
+    queryFn: () => fetchSummary(token, { granularity: "month" }),
+    enabled: !!token,
+  });
+
+  const { data: netWorthData } = useQuery({
+    queryKey: ["plaid", "net-worth"],
+    queryFn: () => fetchNetWorth(token),
+    enabled: !!token,
+  });
+
+  // Calculate emergency fund recommendation
+  const emergencyFundRecommendation = React.useMemo(() => {
+    const recentMonths = summary?.data?.slice(-3) || [];
+    const avgExpense = recentMonths.reduce((sum: number, m: any) => sum + (m.expense || 0), 0) / Math.max(1, recentMonths.length);
+    const netWorth = netWorthData?.summary?.netWorth || 0;
+    const currentMonths = avgExpense > 0 ? netWorth / avgExpense : 0;
+    
+    // Recommend 6 months if less than 6, or 3 months if less than 3
+    const targetMonths = currentMonths < 3 ? 3 : 6;
+    const targetAmount = avgExpense * targetMonths;
+    const currentAmount = netWorth;
+    const needed = Math.max(0, targetAmount - currentAmount);
+    
+    return {
+      targetMonths,
+      targetAmount,
+      currentAmount,
+      currentMonths,
+      needed,
+      avgExpense,
+    };
+  }, [summary, netWorthData]);
+
+  // Check if emergency fund goal already exists
+  const hasEmergencyFundGoal = goals.some((g: Goal) => g.type === "emergency_fund" && g.status === "active");
 
   /* -------------------- Mutations -------------------- */
   const mCreate = useMutation({
@@ -128,6 +169,64 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
 
       {error && <div className="mt-3 text-sm text-[var(--negative)]">Failed to load goals</div>}
 
+      {/* Emergency Fund Quick Create */}
+      {!hasEmergencyFundGoal && emergencyFundRecommendation.avgExpense > 0 && (
+        <div className="mb-4 rounded-xl border-2 border-[var(--positive-ring)] bg-gradient-to-r from-[var(--positive-bg-soft)] to-[var(--positive-bg-soft)]/50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+                💰 Emergency Fund Goal
+              </h4>
+              <p className="text-xs text-[var(--text-secondary)] mb-2">
+                {emergencyFundRecommendation.currentMonths < 1
+                  ? "Start building your emergency fund - aim for 3-6 months of expenses"
+                  : `You have ${emergencyFundRecommendation.currentMonths.toFixed(1)} months saved. Target: ${emergencyFundRecommendation.targetMonths} months`}
+              </p>
+              <div className="flex items-center gap-3 text-xs">
+                <div>
+                  <span className="text-[var(--text-muted)]">Target: </span>
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {money(emergencyFundRecommendation.targetAmount)} ({emergencyFundRecommendation.targetMonths} months)
+                  </span>
+                </div>
+                {emergencyFundRecommendation.needed > 0 && (
+                  <>
+                    <span className="text-[var(--text-muted)]">•</span>
+                    <div>
+                      <span className="text-[var(--text-muted)]">Need: </span>
+                      <span className="font-semibold text-[var(--positive)]">
+                        {money(emergencyFundRecommendation.needed)}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <Btn
+              onClick={async () => {
+                const goal = await mCreate.mutateAsync({
+                  name: "Emergency Fund",
+                  type: "emergency_fund",
+                  targetAmount: emergencyFundRecommendation.targetAmount,
+                  currency: "USD",
+                });
+                // If user has existing net worth, add it as initial contribution
+                if (emergencyFundRecommendation.currentAmount > 0) {
+                  await mAddContrib.mutateAsync({
+                    id: goal._id,
+                    amount: emergencyFundRecommendation.currentAmount,
+                  });
+                }
+              }}
+              disabled={mCreate.isPending || mAddContrib.isPending}
+              className="shrink-0"
+            >
+              {mCreate.isPending || mAddContrib.isPending ? "Creating..." : "Create Goal"}
+            </Btn>
+          </div>
+        </div>
+      )}
+
       {/* Quick Create (glass) */}
       <FormCard title="Create goal">
         <div className="grid gap-3 md:grid-cols-6">
@@ -144,7 +243,19 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
             <Label>Type</Label>
             <Select
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              onChange={(e) => {
+                const newType = e.target.value;
+                setForm({ ...form, type: newType });
+                // Auto-fill emergency fund if selected
+                if (newType === "emergency_fund" && emergencyFundRecommendation.avgExpense > 0) {
+                  setForm((f) => ({
+                    ...f,
+                    type: newType,
+                    name: "Emergency Fund",
+                    targetAmount: emergencyFundRecommendation.targetAmount.toFixed(2),
+                  }));
+                }
+              }}
             >
               <option value="savings">Savings</option>
               <option value="emergency_fund">Emergency Fund</option>
@@ -159,7 +270,7 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
             <Label>Target</Label>
             <Input
               inputMode="decimal"
-              placeholder="0.00"
+              placeholder={form.type === "emergency_fund" ? emergencyFundRecommendation.targetAmount.toFixed(2) : "0.00"}
               value={form.targetAmount}
               onChange={(e) => setForm({ ...form, targetAmount: e.target.value })}
               onBlur={() =>
@@ -177,6 +288,11 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
                   : undefined
               }
             />
+            {form.type === "emergency_fund" && emergencyFundRecommendation.avgExpense > 0 && (
+              <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                Based on {emergencyFundRecommendation.targetMonths} months × {money(emergencyFundRecommendation.avgExpense)}/month
+              </p>
+            )}
           </Field>
 
           <Field>
@@ -296,9 +412,23 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
                 <div className="h-2 w-full rounded-full bg-[var(--btn-bg)]">
                   <div className="h-2 rounded-full bg-[var(--positive)]" style={{ width: `${pct}%` }} />
                 </div>
-                <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                  {money(g.currentAmount, g.currency)} / {money(g.targetAmount, g.currency)} ({Math.round(pct)}%)
+                <div className="mt-1 flex items-center justify-between">
+                  <div className="text-[11px] text-[var(--text-muted)]">
+                    {money(g.currentAmount, g.currency)} / {money(g.targetAmount, g.currency)} ({Math.round(pct)}%)
+                  </div>
+                  {g.type === "emergency_fund" && emergencyFundRecommendation.avgExpense > 0 && (
+                    <div className="text-[10px] text-[var(--text-muted)]">
+                      {((g.currentAmount / emergencyFundRecommendation.avgExpense)).toFixed(1)} months covered
+                    </div>
+                  )}
                 </div>
+                {g.type === "emergency_fund" && g.status === "active" && (
+                  <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
+                    {g.currentAmount < g.targetAmount
+                      ? `Need ${money(g.targetAmount - g.currentAmount, g.currency)} more (${((g.targetAmount - g.currentAmount) / emergencyFundRecommendation.avgExpense).toFixed(1)} months)`
+                      : "✅ Emergency fund complete!"}
+                  </div>
+                )}
               </div>
 
               {/* Quick actions */}

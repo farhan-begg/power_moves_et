@@ -20,7 +20,9 @@ export type WidgetType =
   | "category-pie"
   | "upcoming-bills"
   | "crypto-portfolio"
-  | "net-worth-projection";
+  | "net-worth-projection"
+  | "financial-health"
+  | "action-items";
 
 export type WidgetSize = "sm" | "lg";
 
@@ -96,17 +98,41 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w16: { id: "w16", type: "upcoming-bills",       title: "Upcoming Bills",      size: "sm" },
   // w17: { id: "w17", type: "crypto-portfolio",     title: "Crypto Portfolio",    size: "lg" }, // TODO: Fix widget
   w18: { id: "w18", type: "net-worth-projection", title: "Net Worth Projection", size: "lg" },
+  w19: { id: "w19", type: "financial-health",     title: "Financial Health",     size: "lg" },
+  w20: { id: "w20", type: "action-items",         title: "Action Items",         size: "sm" },
 };
 
 export const DEFAULT_ORDER = [
-  "w1","w2","w3","w4",
-  "w8",
-  "w14",
-  "w5","w7",
-  "w15",
-  "w16",
-  "w18", // Net Worth Projection
-  "w9",
+  // Top: AI Assistant widgets (what to do)
+  "w19", // Financial Health Score - Overall status
+  "w20", // Action Items - What to do next
+  
+  // Key Metrics: Net Worth (where you are)
+  "w8",  // Net Worth - Current financial position
+  
+  // Daily/Recent Stats (quick overview)
+  "w2",  // Today
+  "w3",  // This Month
+  "w4",  // Year to Date
+  
+  // Analysis & Planning (understanding & planning)
+  "w5",  // Income vs Expense Chart - Spending patterns
+  "w18", // Net Worth Projection - Future planning
+  
+  // Goals & Tracking (actionable)
+  "w14", // Goals - Track progress
+  "w16", // Upcoming Bills - What's due
+  
+  // Details (drill down)
+  "w7",  // Recent Spending - Transaction list
+  "w15", // Category Summary - Where money goes
+  "w6",  // Bank Flow - Account breakdown
+  "w9",  // Accounts - All accounts view
+  
+  // Connection (setup)
+  "w1",  // Connect your bank - Setup
+  
+  // Disabled widgets
   // "w12", // Stocks & ETFs - TODO: Fix widget
   // "w10","w11", // Credit Cards, Investments - TODO: Fix widgets
   // "w17", // Crypto Portfolio - TODO: Fix widget
