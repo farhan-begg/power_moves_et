@@ -10,7 +10,8 @@ export interface GlassCardProps {
 }
 
 /**
- * Glassmorphism card container with optional hover effects and glow.
+ * Theme-aware card container with optional hover effects and glow.
+ * Adapts to glass/light/dark themes via CSS variables.
  */
 export function GlassCard({
   children,
@@ -32,12 +33,18 @@ export function GlassCard({
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
+        "relative overflow-hidden rounded-2xl p-5",
+        "bg-[var(--widget-bg)] border border-[var(--widget-border)] ring-1 ring-[var(--widget-ring)]",
         hover && "transition-shadow hover:shadow-2xl",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
+      style={{
+        backdropFilter: "var(--widget-blur)",
+        WebkitBackdropFilter: "var(--widget-blur)",
+        boxShadow: "var(--widget-shadow)",
+      }}
     >
       {glow !== "none" && (
         <div

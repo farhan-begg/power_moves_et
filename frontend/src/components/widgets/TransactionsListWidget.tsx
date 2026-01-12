@@ -32,7 +32,7 @@ type PlaidAccount = {
 };
 
 const glass =
-  "rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
+  "rounded-2xl p-5 backdrop-blur-md bg-[var(--btn-bg)] border border-white/10 shadow-xl ring-1 ring-[var(--widget-ring)]";
 
 const money = (n: number) =>
   n.toLocaleString("en-US", {
@@ -300,7 +300,7 @@ export default function TransactionsListWidget() {
         <span
           key="conf"
           title={`Confidence ${Math.round(matchConfidence * 100)}%`}
-          className="px-1.5 py-0.5 rounded-full bg-white/5 text-white/60 ring-1 ring-white/10 text-[10px]"
+          className="px-1.5 py-0.5 rounded-full bg-[var(--btn-bg)] text-[var(--text-muted)] ring-1 ring-[var(--widget-ring)] text-[10px]"
         >
           ~{Math.round(matchConfidence * 100)}%
         </span>
@@ -314,15 +314,15 @@ export default function TransactionsListWidget() {
     <div className={glass}>
       {/* selection bar */}
       {selectedIds.length > 0 && (
-        <div className="sticky top-0 z-10 mb-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white backdrop-blur-md ring-1 ring-white/10">
+        <div className="sticky top-0 z-10 mb-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-[var(--text-primary)] backdrop-blur-md ring-1 ring-[var(--widget-ring)]">
           <div className="flex items-center justify-between">
             <div>
               <span className="font-medium">{selectedIds.length}</span> selected —{" "}
-              <span className="text-white/70">double-click any selected row to set a category</span>
+              <span className="text-[var(--text-secondary)]">double-click any selected row to set a category</span>
             </div>
             <button
               onClick={clearSelection}
-              className="rounded-lg bg-white/5 px-3 py-1.5 ring-1 ring-white/10 hover:bg-white/10"
+              className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 ring-1 ring-[var(--widget-ring)] hover:bg-white/10"
             >
               Clear
             </button>
@@ -333,16 +333,16 @@ export default function TransactionsListWidget() {
       {/* header + controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
-          <div className="text-xs text-white/60">
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Recent Activity</h3>
+          <div className="text-xs text-[var(--text-muted)]">
             {startDate} → {endDate}
           </div>
           {accountIdParam ? (
-            <div className="mt-1 text-[11px] text-white/60">
-              Account: <span className="text-white">{accMap.get(accountIdParam) || "Selected account"}</span>
+            <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+              Account: <span className="text-[var(--text-primary)]">{accMap.get(accountIdParam) || "Selected account"}</span>
             </div>
           ) : (
-            <div className="mt-1 text-[11px] text-white/40">All accounts</div>
+            <div className="mt-1 text-[11px] text-[var(--text-muted)]">All accounts</div>
           )}
         </div>
 
@@ -364,8 +364,8 @@ export default function TransactionsListWidget() {
             className={[
               "px-2.5 py-1.5 rounded-md text-xs border transition-colors",
               preset === p
-                ? "bg-white/15 text-white border-white/25"
-                : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10",
+                ? "bg-white/15 text-[var(--text-primary)] border-white/25"
+                : "bg-[var(--btn-bg)] text-[var(--text-secondary)] border-white/10 hover:bg-white/10",
             ].join(" ")}
           >
             {p.toUpperCase()}
@@ -376,14 +376,14 @@ export default function TransactionsListWidget() {
           <div className="flex items-center gap-2">
             <input
               type="date"
-              className="rounded-md bg-white/10 px-2 py-1.5 text-xs text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+              className="rounded-md bg-[var(--btn-bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-white/20"
               value={pendingStart}
               onChange={(e) => setPendingStart(e.target.value)}
             />
-            <span className="text-white/50 text-xs">to</span>
+            <span className="text-[var(--text-muted)] text-xs">to</span>
             <input
               type="date"
-              className="rounded-md bg-white/10 px-2 py-1.5 text-xs text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+              className="rounded-md bg-[var(--btn-bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-white/20"
               value={pendingEnd}
               onChange={(e) => setPendingEnd(e.target.value)}
             />
@@ -391,13 +391,13 @@ export default function TransactionsListWidget() {
             <button
               onClick={applyCustomRange}
               disabled={!pendingStart || !pendingEnd}
-              className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-40"
             >
               Apply
             </button>
             <button
               onClick={resetCustomRange}
-              className="inline-flex items-center gap-2 rounded-lg bg-transparent px-2.5 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+              className="inline-flex items-center gap-2 rounded-lg bg-transparent px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
               title="Reset to applied dates"
             >
               Reset
@@ -413,7 +413,7 @@ export default function TransactionsListWidget() {
 
       {/* empty */}
       {!isError && transactions.length === 0 && (
-        <div className="text-white/70">
+        <div className="text-[var(--text-secondary)]">
           No results for <b>{filter === "all" ? "all types" : filter}</b>
           {accountIdParam && (
             <>
@@ -449,7 +449,7 @@ export default function TransactionsListWidget() {
                   onDoubleClick={() => handleDoubleClick(t._id)}
                   className={[
                     "py-3 flex items-center gap-4 cursor-pointer select-none rounded-lg",
-                    isSelected ? "bg-white/10 ring-1 ring-white/20 shadow-inner" : "hover:bg-white/5",
+                    isSelected ? "bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)] shadow-inner" : "hover:bg-[var(--btn-bg)]",
                   ].join(" ")}
                 >
                   <div className="shrink-0">
@@ -473,7 +473,7 @@ export default function TransactionsListWidget() {
                           />
                         </span>
 
-                        <div className="truncate font-semibold text-white">
+                        <div className="truncate font-semibold text-[var(--text-primary)]">
                           {t.description || "Transaction"}
                         </div>
                       </div>
@@ -483,9 +483,9 @@ export default function TransactionsListWidget() {
                       </div>
                     </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/60">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                       {bank && <span className="truncate">{bank}</span>}
-                      <span className="text-white/30">•</span>
+                      <span className="text-[var(--text-muted)]">•</span>
                       <span
                         className={`px-1.5 py-0.5 rounded-full uppercase tracking-wide text-[10px] ring-1 ${
                           isExpense
@@ -495,7 +495,7 @@ export default function TransactionsListWidget() {
                       >
                         {actionLabel}
                       </span>
-                      <span className="text-white/30">•</span>
+                      <span className="text-[var(--text-muted)]">•</span>
                       <span>{formatUTC_MMDDYYYY(t.date)}</span>
 
                       {/* recurring chips */}
@@ -507,7 +507,7 @@ export default function TransactionsListWidget() {
                     </div>
                   </div>
 
-                  <div className="text-[10px] px-2 py-1 rounded-full bg-white/5 ring-1 ring-white/10 text-white/60 shrink-0">
+                  <div className="text-[10px] px-2 py-1 rounded-full bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)] text-[var(--text-muted)] shrink-0">
                     {t.source === "plaid" ? "Plaid" : "Manual"}
                   </div>
                 </li>
@@ -517,26 +517,26 @@ export default function TransactionsListWidget() {
 
           {/* pagination */}
           <div className="mt-4 flex items-center justify-between">
-            <div className="text-xs text-white/60">
-              Showing <span className="text-white">{from}</span>–<span className="text-white">{to}</span> of{" "}
-              <span className="text-white">{total}</span>
+            <div className="text-xs text-[var(--text-muted)]">
+              Showing <span className="text-[var(--text-primary)]">{from}</span>–<span className="text-[var(--text-primary)]">{to}</span> of{" "}
+              <span className="text-[var(--text-primary)]">{total}</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || isFetching}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/80 disabled:opacity-40"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-[var(--btn-bg)] text-[var(--text-secondary)] disabled:opacity-40"
               >
                 <ChevronLeftIcon className="h-4 w-4" />
                 Prev
               </button>
-              <div className="text-xs text-white/70">
-                Page <span className="text-white">{page}</span> / <span className="text-white">{pages}</span>
+              <div className="text-xs text-[var(--text-secondary)]">
+                Page <span className="text-[var(--text-primary)]">{page}</span> / <span className="text-[var(--text-primary)]">{pages}</span>
               </div>
               <button
                 onClick={() => setPage((p) => Math.min(pages, p + 1))}
                 disabled={page >= pages}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/80 disabled:opacity-40"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-[var(--btn-bg)] text-[var(--text-secondary)] disabled:opacity-40"
               >
                 Next
                 <ChevronRightIcon className="h-4 w-4" />

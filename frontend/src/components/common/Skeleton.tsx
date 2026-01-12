@@ -7,9 +7,10 @@ export interface SkeletonProps {
 
 /**
  * Base skeleton element with shimmer animation.
+ * Theme-aware via CSS variables.
  */
 export function Skeleton({ className = "" }: SkeletonProps) {
-  return <div className={["rounded bg-white/10", className].join(" ")} />;
+  return <div className={["rounded bg-[var(--btn-bg)]", className].join(" ")} />;
 }
 
 export interface SkeletonCardProps {
@@ -20,14 +21,21 @@ export interface SkeletonCardProps {
 
 /**
  * Skeleton card with shimmer animation for loading states.
+ * Theme-aware via CSS variables.
  */
 export function SkeletonCard({ title, className = "", children }: SkeletonCardProps) {
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
+        "relative overflow-hidden rounded-2xl p-5",
+        "bg-[var(--widget-bg)] border border-[var(--widget-border)] ring-1 ring-[var(--widget-ring)]",
         className,
       ].join(" ")}
+      style={{
+        backdropFilter: "var(--widget-blur)",
+        WebkitBackdropFilter: "var(--widget-blur)",
+        boxShadow: "var(--widget-shadow)",
+      }}
     >
       {children || (
         <>
@@ -45,7 +53,7 @@ export function SkeletonCard({ title, className = "", children }: SkeletonCardPr
 
       {/* Shimmer overlay */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-        <div className="animate-[shimmer_2s_infinite] absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        <div className="animate-[shimmer_2s_infinite] absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-[var(--btn-hover)] to-transparent" />
       </div>
       <style>{`@keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(200%); } }`}</style>
 

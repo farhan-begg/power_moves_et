@@ -143,7 +143,7 @@ export default function BankFlowWidget() {
     return rows;
   }, [transactions, accMap, supportsAccountId, accounts]);
 
-  if (isLoading || accLoading) return <p className="text-white/70">Loading…</p>;
+  if (isLoading || accLoading) return <p className="text-[var(--text-secondary)]">Loading…</p>;
   if (isError) return <p className="text-rose-300">Failed to load bank flow.</p>;
 
   return (
@@ -153,7 +153,7 @@ export default function BankFlowWidget() {
         return (
           <div key={g.key} className="py-3 flex items-center gap-4">
             <div
-              className={`h-10 w-10 rounded-xl flex items-center justify-center ring-1 ring-white/10 ${
+              className={`h-10 w-10 rounded-xl flex items-center justify-center ring-1 ring-[var(--widget-ring)] ${
                 netPos
                   ? "bg-emerald-400/10 text-emerald-300"
                   : "bg-rose-400/10 text-rose-300"
@@ -163,7 +163,7 @@ export default function BankFlowWidget() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="text-white font-medium truncate">{g.name}</div>
+              <div className="text-[var(--text-primary)] font-medium truncate">{g.name}</div>
               <div className="mt-1 flex flex-wrap gap-2 text-sm">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/10 ring-1 ring-emerald-400/20 text-emerald-300">
                   <ArrowUpRightIcon className="h-4 w-4" /> In:{" "}
@@ -186,14 +186,14 @@ export default function BankFlowWidget() {
                 {netPos ? "+" : "-"}
                 {money(Math.abs(g.net))}
               </div>
-              <div className="text-xs text-white/60">Net</div>
+              <div className="text-xs text-[var(--text-muted)]">Net</div>
             </div>
           </div>
         );
       })}
 
       {grouped.length === 0 && (
-        <div className="py-6 text-white/70">No data in this range yet.</div>
+        <div className="py-6 text-[var(--text-secondary)]">No data in this range yet.</div>
       )}
     </div>
   );

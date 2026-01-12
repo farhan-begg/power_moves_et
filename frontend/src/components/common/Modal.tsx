@@ -12,7 +12,7 @@ export interface ModalProps {
 }
 
 /**
- * Modal dialog with glassmorphism styling.
+ * Modal dialog with theme-aware styling.
  */
 export function Modal({ open, onClose, title, children, className = "" }: ModalProps) {
   if (!open) return null;
@@ -29,11 +29,11 @@ export function Modal({ open, onClose, title, children, className = "" }: ModalP
       <GlassCard className={["relative w-full max-w-lg mx-4", className].join(" ")}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-white/70 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="rounded-md p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--btn-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)] transition"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>

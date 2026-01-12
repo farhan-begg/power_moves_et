@@ -387,17 +387,17 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
     return (
       <Card className={className}>
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-medium text-white/90">Net worth</h3>
+          <h3 className="text-sm font-medium text-[var(--text-primary)]">Net worth</h3>
           <button
             onClick={refresh}
-            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
             aria-label="Refresh net worth"
           >
             <ArrowPathIcon className="h-4 w-4" />
             Refresh
           </button>
         </div>
-        <div className="mt-1 text-[11px] text-white/60">As of {formatMMDDYYYY(new Date())}</div>
+        <div className="mt-1 text-[11px] text-[var(--text-muted)]">As of {formatMMDDYYYY(new Date())}</div>
         <div className="mt-4 text-rose-300 text-sm">Failed to load: {String(error)}</div>
         <Btn onClick={refresh} className="mt-3">
           <ArrowPathIcon className="h-4 w-4" />
@@ -418,30 +418,30 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 
       <div className="flex items-baseline justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white/90">Net worth</h3>
-          <div className="text-[11px] text-white/60 mt-0.5">
-            As of <span className="text-white">{formatMMDDYYYY(new Date())}</span>
+          <h3 className="text-sm font-medium text-[var(--text-primary)]">Net worth</h3>
+          <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+            As of <span className="text-[var(--text-primary)]">{formatMMDDYYYY(new Date())}</span>
           </div>
 
           {/* ✅ label logic that matches backend rules */}
           {nwItemId === "__all__" ? (
-            <div className="text-[11px] text-white/40 mt-0.5">All banks • All accounts</div>
+            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">All banks • All accounts</div>
           ) : nwAccountId ? (
-            <div className="text-[11px] text-white/60 mt-0.5">
-              Account: <span className="text-white">{selectedAccountLabel}</span>
+            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+              Account: <span className="text-[var(--text-primary)]">{selectedAccountLabel}</span>
             </div>
           ) : (
-            <div className="text-[11px] text-white/40 mt-0.5">All accounts</div>
+            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">All accounts</div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
           {isRefreshing && (
-            <ArrowPathIcon className="h-4 w-4 animate-spin text-white/70" aria-label="Refreshing" />
+            <ArrowPathIcon className="h-4 w-4 animate-spin text-[var(--text-secondary)]" aria-label="Refreshing" />
           )}
           <button
             onClick={refresh}
-            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
             aria-label="Refresh net worth"
           >
             <ArrowPathIcon className="h-4 w-4" />
@@ -453,7 +453,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
       {/* Big net number */}
       <div className="mt-3 flex items-end justify-between">
         <div>
-          <div className="text-xs uppercase tracking-wide text-white/60">Net</div>
+          <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Net</div>
           <div
             className={[
               "mt-1 font-semibold font-mono tabular-nums text-3xl",
@@ -467,11 +467,11 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 
         {/* debts share meter */}
         <div className="w-40">
-          <div className="flex items-center justify-between text-[11px] text-white/60">
+          <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
             <span>Debt Share</span>
             <span>{debtPct}%</span>
           </div>
-          <div className="mt-1 h-2 rounded-full bg-white/10">
+          <div className="mt-1 h-2 rounded-full bg-[var(--btn-bg)]">
             <div className="h-2 rounded-full bg-rose-400/70" style={{ width: `${debtPct}%` }} />
           </div>
         </div>
@@ -594,11 +594,11 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
                   <span>
                     Current selection{" "}
                     {selectedAccountId ? (
-                      <span className="text-white/70">
-                        (will link to <span className="text-white">{selectedAccountLabel}</span>)
+                      <span className="text-[var(--text-secondary)]">
+                        (will link to <span className="text-[var(--text-primary)]">{selectedAccountLabel}</span>)
                       </span>
                     ) : (
-                      <span className="text-white/70">(All accounts – not linked)</span>
+                      <span className="text-[var(--text-secondary)]">(All accounts – not linked)</span>
                     )}
                   </span>
                 </label>
@@ -641,13 +641,13 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
           </div>
 
           {/* Scope note (read-only) */}
-          <div className="mt-2 text-[11px] text-white/40">
+          <div className="mt-2 text-[11px] text-[var(--text-muted)]">
             {txnForm.destination === "new-manual" ? (
               <>A new manual account will be created and this entry will be linked to it.</>
             ) : selectedAccountId ? (
               <>
                 This entry will be linked to{" "}
-                <span className="text-white">{selectedAccountLabel}</span>.
+                <span className="text-[var(--text-primary)]">{selectedAccountLabel}</span>.
               </>
             ) : (
               <>With “All accounts” selected, this entry won’t be tied to a specific account.</>
@@ -763,7 +763,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
             </Field>
           </div>
 
-          <div className="mt-2 text-[11px] text-white/40">
+          <div className="mt-2 text-[11px] text-[var(--text-muted)]">
             Assets created here are scoped to <b>All accounts</b> by default.
           </div>
 
@@ -797,7 +797,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
 
       {/* Manual assets list */}
       <div className="mt-5">
-        <div className="text-xs uppercase tracking-wide text-white/60 mb-2">Manual Assets</div>
+        <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-2">Manual Assets</div>
         {assets.length === 0 ? (
           <div className="text-xs opacity-70">None yet.</div>
         ) : (
@@ -805,7 +805,7 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
             {assets.map((a) => (
               <li
                 key={a._id}
-                className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                className="flex items-center justify-between rounded-lg border border-white/10 bg-[var(--btn-bg)] px-3 py-2"
               >
                 <div className="min-w-0">
                   <div className="text-sm">{a.name}</div>
@@ -813,9 +813,9 @@ export default function NetWorthWidget({ className = "" }: { className?: string 
                     {a.type} • {money(a.value, a.currency || currencyHint)}
                     {a.asOf ? ` • as of ${a.asOf.slice(0, 10)}` : ""}{" "}
                     {a.accountScope === "account" && a.accountId ? (
-                      <span className="text-white/50">(Linked)</span>
+                      <span className="text-[var(--text-muted)]">(Linked)</span>
                     ) : (
-                      <span className="text-white/50">(All accounts)</span>
+                      <span className="text-[var(--text-muted)]">(All accounts)</span>
                     )}
                   </div>
                 </div>
@@ -841,7 +841,7 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
+        "relative overflow-hidden rounded-2xl border border-white/10 bg-[var(--btn-bg)] backdrop-blur-md p-5 ring-1 ring-[var(--widget-ring)] shadow-xl",
         "transition-shadow hover:shadow-2xl",
         className,
       ].join(" ")}
@@ -887,8 +887,8 @@ function Pill({
         styles,
       ].join(" ")}
     >
-      <span className="text-xs text-white/70">{label}</span>
-      <span className="font-mono tabular-nums text-sm text-white">
+      <span className="text-xs text-[var(--text-secondary)]">{label}</span>
+      <span className="font-mono tabular-nums text-sm text-[var(--text-primary)]">
         {prefix ?? ""}
         {value}
       </span>
@@ -900,20 +900,20 @@ function NetWorthSkeleton({ className = "" }: { className?: string }) {
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
+        "relative overflow-hidden rounded-2xl border border-white/10 bg-[var(--btn-bg)] backdrop-blur-md p-5 ring-1 ring-[var(--widget-ring)] shadow-xl",
         className,
       ].join(" ")}
     >
       <div className="flex items-baseline justify-between">
-        <div className="h-3 w-28 rounded bg-white/10" />
-        <div className="h-6 w-16 rounded bg-white/10" />
+        <div className="h-3 w-28 rounded bg-[var(--btn-bg)]" />
+        <div className="h-6 w-16 rounded bg-[var(--btn-bg)]" />
       </div>
 
-      <div className="mt-4 h-8 w-40 rounded bg-white/10" />
+      <div className="mt-4 h-8 w-40 rounded bg-[var(--btn-bg)]" />
 
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="h-10 rounded-xl bg-white/10" />
-        <div className="h-10 rounded-xl bg-white/10" />
+        <div className="h-10 rounded-xl bg-[var(--btn-bg)]" />
+        <div className="h-10 rounded-xl bg-[var(--btn-bg)]" />
       </div>
 
       {/* shimmer */}
@@ -946,14 +946,14 @@ function Btn({
 }) {
   const cls =
     kind === "solid"
-      ? "bg-white/10 hover:bg-white/15 focus:ring-white/20"
-      : "bg-transparent hover:bg-white/10 focus:ring-white/20";
+      ? "bg-[var(--btn-bg)] hover:bg-white/15 focus:ring-[var(--widget-ring)]"
+      : "bg-transparent hover:bg-[var(--btn-bg)] focus:ring-[var(--widget-ring)]";
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={[
-        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2",
+        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-[var(--text-primary)]focus:outline-none focus:ring-2",
         cls,
         disabled ? "opacity-50 cursor-not-allowed" : "",
         className,
@@ -977,7 +977,7 @@ function IconBtn({
     <button
       title={title}
       onClick={onClick}
-      className="inline-flex items-center justify-center rounded-md p-1.5 text-white/80 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+      className="inline-flex items-center justify-center rounded-md p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--btn-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
     >
       {children}
     </button>
@@ -994,10 +994,10 @@ function FormCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4 ring-1 ring-white/10 shadow-lg">
+    <div className="mt-3 rounded-2xl border border-white/10 bg-[var(--btn-bg)] p-4 ring-1 ring-[var(--widget-ring)] shadow-lg">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-white/90">{title}</h4>
-        {saving && <ArrowPathIcon className="h-4 w-4 animate-spin text-white/70" />}
+        <h4 className="text-sm font-medium text-[var(--text-primary)]">{title}</h4>
+        {saving && <ArrowPathIcon className="h-4 w-4 animate-spin text-[var(--text-secondary)]" />}
       </div>
       <Divider />
       {children}
@@ -1009,16 +1009,16 @@ function Field({ children, className = "" }: { children: React.ReactNode; classN
   return <div className={["flex flex-col gap-1", className].join(" ")}>{children}</div>;
 }
 function Label({ children }: { children: React.ReactNode }) {
-  return <label className="text-[11px] text-white/60">{children}</label>;
+  return <label className="text-[11px] text-[var(--text-muted)]">{children}</label>;
 }
 function Help({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] text-white/50">{children}</div>;
+  return <div className="text-[11px] text-[var(--text-muted)]">{children}</div>;
 }
 function ErrorText({ children }: { children: React.ReactNode }) {
   return <div className="mt-1 text-[11px] text-rose-300">{children}</div>;
 }
 function Divider() {
-  return <div className="my-3 h-px w-full bg-white/10" />;
+  return <div className="my-3 h-px w-full bg-[var(--btn-bg)]" />;
 }
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { prefix?: string };
@@ -1027,14 +1027,14 @@ function Input({ prefix, className = "", ...props }: InputProps) {
   if (prefix) {
     return (
       <div className="relative">
-        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-white/50">
+        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-[var(--text-muted)]">
           {prefix}
         </span>
         <input
           {...props}
           className={[
-            "w-full rounded-lg bg-white/10 pl-7 pr-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40",
-            "focus:outline-none focus:ring-white/20",
+            "w-full rounded-lg bg-[var(--btn-bg)] pl-7 pr-3 py-2 text-sm text-[var(--text-primary)]ring-1 ring-[var(--widget-ring)] placeholder-white/40",
+            "focus:outline-none focus:ring-[var(--widget-ring)]",
             ariaInvalid ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
             className,
           ].join(" ")}
@@ -1046,8 +1046,8 @@ function Input({ prefix, className = "", ...props }: InputProps) {
     <input
       {...props}
       className={[
-        "w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40",
-        "focus:outline-none focus:ring-white/20",
+        "w-full rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)]ring-1 ring-[var(--widget-ring)] placeholder-white/40",
+        "focus:outline-none focus:ring-[var(--widget-ring)]",
         ariaInvalid ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
         className,
       ].join(" ")}
@@ -1087,7 +1087,7 @@ function Select({
   return (
     <div className="relative">
       {leftIcon && (
-        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-white/60">
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
           {leftIcon}
         </span>
       )}
@@ -1096,8 +1096,8 @@ function Select({
         {...props}
         disabled={isDisabled}
         className={[
-          "w-full rounded-lg bg-white/10 pr-8 text-white ring-1 ring-white/10",
-          "placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20",
+          "w-full rounded-lg bg-[var(--btn-bg)] pr-8 text-[var(--text-primary)]ring-1 ring-[var(--widget-ring)]",
+          "placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]",
           "appearance-none [color-scheme:dark] backdrop-blur-md",
           sizeCls,
           leftIcon ? "pl-8" : "px-3",
@@ -1106,12 +1106,12 @@ function Select({
           className,
         ].join(" ")}
       >
-        {isLoading ? <option className="bg-slate-900 text-white">Loading…</option> : children}
+        {isLoading ? <option className="bg-slate-900 text-[var(--text-primary)]">Loading…</option> : children}
       </select>
 
       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
         {rightIcon ?? (
-          <svg viewBox="0 0 20 20" className="h-4 w-4 text-white/70">
+          <svg viewBox="0 0 20 20" className="h-4 w-4 text-[var(--text-secondary)]">
             <path
               fill="currentColor"
               d="M5.6 7.6a1 1 0 0 1 1.4 0L10 10.6l3-3a1 1 0 1 1 1.4 1.4l-3.7 3.7a1 1 0 0 1-1.4 0L5.6 9a1 1 0 0 1 0-1.4Z"
@@ -1131,8 +1131,8 @@ function Textarea({ className = "", ...props }: TextareaProps) {
     <textarea
       {...props}
       className={[
-        "min-h-[72px] w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10",
-        "focus:outline-none focus:ring-white/20",
+        "min-h-[72px] w-full rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)]ring-1 ring-[var(--widget-ring)]",
+        "focus:outline-none focus:ring-[var(--widget-ring)]",
         className,
       ].join(" ")}
     />

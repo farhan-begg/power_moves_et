@@ -30,38 +30,37 @@ export default function AccountsWidget() {
 
   return (
     <div className={glass}>
-      <div className="mb-3 text-white text-lg font-semibold">Accounts</div>
+      <div className="mb-3 text-[var(--text-primary)] text-lg font-semibold">Accounts</div>
 
       {isLoading ? (
-        <div className="text-white/70">Loading accounts…</div>
+        <div className="text-[var(--text-secondary)]">Loading accounts…</div>
       ) : accounts.length === 0 ? (
-        <div className="text-white/70">No accounts linked.</div>
+        <div className="text-[var(--text-secondary)]">No accounts linked.</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {accounts.map((a) => (
             <div
               key={a.accountId}
-              className="flex items-center gap-4 rounded-xl p-4 bg-white/5 ring-1 ring-white/10"
+              className="flex items-center gap-4 rounded-xl p-4 bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)]"
             >
-              <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-white/10">
+              <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-[var(--btn-hover)] text-[var(--text-primary)]">
                 {iconForSubtype(a.subtype)}
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="text-white font-medium truncate">
+                <div className="text-[var(--text-primary)] font-medium truncate">
                   {a.name || a.officialName || "Account"}
                 </div>
-                <div className="text-xs text-white/60">
+                <div className="text-xs text-[var(--text-muted)]">
                   {a.type}
                   {a.subtype ? ` • ${a.subtype}` : ""}
                   {a.mask ? ` ••••${String(a.mask).slice(-4)}` : ""}
                 </div>
               </div>
 
-              {/* ✅ balances are null from backend, so don't show them */}
               <div className="text-right">
-                <div className="text-sm text-white/70">Balance</div>
-                <div className="text-white/60 text-sm">—</div>
+                <div className="text-sm text-[var(--text-secondary)]">Balance</div>
+                <div className="text-[var(--text-muted)] text-sm">—</div>
               </div>
             </div>
           ))}

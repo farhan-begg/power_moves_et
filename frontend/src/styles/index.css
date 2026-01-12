@@ -11,19 +11,91 @@
   --color-card: var(--user-card, #ffffff);
 }
 
-:root {
-  --user-bg: #f9fafb;
-  --user-text: #111827;
-  --user-primary: #3b83f638;
+/* ===== THEME SYSTEM ===== */
+
+/* Glass theme (default) - Glassmorphism with backdrop blur and transparency */
+:root,
+[data-theme="glass"] {
+  --widget-bg: rgba(255, 255, 255, 0.075);
+  --widget-border: rgba(255, 255, 255, 0.15);
+  --widget-blur: blur(12px);
+  --widget-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --widget-ring: rgba(255, 255, 255, 0.1);
+
+  --page-bg-from: #0f172a;
+  --page-bg-to: #020617;
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.5);
+
+  --btn-bg: rgba(255, 255, 255, 0.1);
+  --btn-border: rgba(255, 255, 255, 0.15);
+  --btn-hover: rgba(255, 255, 255, 0.15);
+
+  --positive: #10b981;
+  --negative: #f43f5e;
+
+  --user-bg: #0f172a;
+  --user-text: #ffffff;
+  --user-primary: #3b83f6;
+  --user-card: rgba(255, 255, 255, 0.075);
+}
+
+/* Light theme - Clean light colors with solid backgrounds */
+[data-theme="light"] {
+  --widget-bg: #ffffff;
+  --widget-border: #d1d5db;
+  --widget-blur: none;
+  --widget-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --widget-ring: rgba(0, 0, 0, 0.08);
+
+  --page-bg-from: #e5e7eb;
+  --page-bg-to: #f3f4f6;
+
+  --text-primary: #030712;
+  --text-secondary: #1f2937;
+  --text-muted: #4b5563;
+
+  --btn-bg: #e5e7eb;
+  --btn-border: #9ca3af;
+  --btn-hover: #d1d5db;
+
+  --positive: #047857;
+  --negative: #b91c1c;
+
+  --user-bg: #f3f4f6;
+  --user-text: #030712;
+  --user-primary: #1d4ed8;
   --user-card: #ffffff;
 }
 
-/* Example of dark theme (later users can switch this dynamically) */
+/* Dark theme - Dark solid colors without glass effects */
 [data-theme="dark"] {
-  --user-bg: #1f2937;
+  --widget-bg: #1f2937;
+  --widget-border: #374151;
+  --widget-blur: none;
+  --widget-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --widget-ring: rgba(255, 255, 255, 0.05);
+
+  --page-bg-from: #111827;
+  --page-bg-to: #111827;
+
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  --btn-bg: #374151;
+  --btn-border: #4b5563;
+  --btn-hover: #4b5563;
+
+  --positive: #34d399;
+  --negative: #fb7185;
+
+  --user-bg: #111827;
   --user-text: #f9fafb;
-  --user-primary: #6365f13a;
-  --user-card: #374151;
+  --user-primary: #6366f1;
+  --user-card: #1f2937;
 }
 
 html { scroll-behavior: smooth; }

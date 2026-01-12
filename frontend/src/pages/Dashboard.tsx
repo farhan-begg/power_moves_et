@@ -25,8 +25,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { syncPlaidTransactions } from "../api/plaid";
 
 import LogoLoader from "../components/common/LogoLoader";
+import ThemeToggle from "../components/common/ThemeToggle";
 
-import { ArrowPathIcon, ArrowRightOnRectangleIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon, ArrowRightOnRectangleIcon, Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
 
 const INITIAL_SYNC_KEY = "pm_initial_sync_done";
 
@@ -173,24 +175,39 @@ export default function Dashboard() {
   if (!token) return <LogoLoader show />;
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 p-6 text-white">
+    <div
+      className="relative min-h-screen p-6"
+      style={{
+        background: `linear-gradient(to bottom right, var(--page-bg-from), var(--page-bg-to))`,
+      }}
+    >
       {showInitialLoader && <LogoLoader />}
 
-      <h1 className="text-2xl font-semibold mb-4">Your Dashboard</h1>
+      <h1 className="text-2xl font-semibold mb-4 text-[var(--text-primary)]">Your Dashboard</h1>
 
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl text-white font-semibold">Overview</h2>
+        <h2 className="text-xl font-semibold text-[var(--text-primary)]">Overview</h2>
 
         <div className="flex items-center gap-3">
           <GlobalAccountFilter />
 
+          <ThemeToggle />
+
+          <Link
+            to="/settings"
+            className="p-2 rounded-md bg-[var(--btn-bg)] border border-[var(--btn-border)] hover:bg-[var(--btn-hover)] transition"
+            title="Settings"
+          >
+            <Cog6ToothIcon className="w-5 h-5 text-[var(--text-primary)]" />
+          </Link>
+
           <button
             onClick={handleManualRefresh}
             disabled={!token || isSyncing}
-            className="p-2 rounded-md bg-white/10 border border-white/15 hover:bg-white/15 disabled:opacity-50 transition"
+            className="p-2 rounded-md bg-[var(--btn-bg)] border border-[var(--btn-border)] hover:bg-[var(--btn-hover)] disabled:opacity-50 transition"
             title="Sync latest transactions"
           >
-            <ArrowPathIcon className={`w-5 h-5 ${isSyncing ? "animate-spin text-blue-400" : "text-white"}`} />
+            <ArrowPathIcon className={`w-5 h-5 ${isSyncing ? "animate-spin text-blue-400" : "text-[var(--text-primary)]"}`} />
           </button>
 
           <button

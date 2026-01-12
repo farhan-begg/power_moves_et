@@ -11,13 +11,14 @@ export interface PillProps {
 }
 
 const kindStyles = {
-  positive: "bg-emerald-400/10 text-emerald-200 ring-emerald-400/20",
-  negative: "bg-rose-400/10 text-rose-200 ring-rose-400/20",
-  neutral: "bg-white/10 text-white/80 ring-white/15",
+  positive: "bg-emerald-400/10 text-[var(--positive)] ring-emerald-400/20",
+  negative: "bg-rose-400/10 text-[var(--negative)] ring-rose-400/20",
+  neutral: "bg-[var(--btn-bg)] text-[var(--text-secondary)] ring-[var(--widget-ring)]",
 };
 
 /**
  * Pill/badge component for displaying labeled values with semantic coloring.
+ * Theme-aware via CSS variables.
  */
 export function Pill({
   label,
@@ -38,13 +39,13 @@ export function Pill({
     >
       <div className="flex items-center gap-2">
         {icon && (
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white/10">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--btn-bg)]">
             {icon}
           </span>
         )}
-        <span className="text-xs text-white/70">{label}</span>
+        <span className="text-xs text-[var(--text-muted)]">{label}</span>
       </div>
-      <span className="font-mono tabular-nums text-sm text-white">
+      <span className="font-mono tabular-nums text-sm text-[var(--text-primary)]">
         {prefix ?? ""}
         {value}
       </span>

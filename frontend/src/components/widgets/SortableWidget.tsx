@@ -44,25 +44,28 @@ export default function SortableWidget({
     animateLayoutChanges: ({ isSorting, wasDragging }) => isSorting || wasDragging,
   });
 
-  const style: React.CSSProperties = {
+  const combinedStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
+    backdropFilter: "var(--widget-blur)",
+    WebkitBackdropFilter: "var(--widget-blur)",
+    boxShadow: "var(--widget-shadow)",
   };
 
   return (
     <article
       ref={setNodeRef}
       data-grid-item
-      style={style}
+      style={combinedStyle}
       className={[
         // base card
         "group rounded-2xl overflow-hidden",
-        "backdrop-blur-lg bg-white/7.5 border border-white/15 shadow-xl ring-1 ring-white/10",
+        "bg-[var(--widget-bg)] border border-[var(--widget-border)] ring-1 ring-[var(--widget-ring)]",
         // density + hover
         "p-3 sm:p-4 xl:p-5 hover:shadow-2xl transition",
         // drag state
         isDragging ? "opacity-70 scale-[0.98]" : "",
-        // 👇 spans come from parent grid (Dashboard) via className
+        // spans come from parent grid (Dashboard) via className
         className || "",
       ].join(" ")}
     >
@@ -75,14 +78,14 @@ export default function SortableWidget({
         {...attributes}
         {...listeners}
       >
-        <div className="flex items-center gap-2 text-sm sm:text-base font-medium text-white/90">
+        <div className="flex items-center gap-2 text-sm sm:text-base font-medium text-[var(--text-primary)]">
           <ArrowsUpDownIcon className="h-4 w-4 opacity-70" />
           <span className="truncate">{title}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => dispatch(toggleWidgetSize(id))}
-            className="p-1 rounded-md hover:bg-white/10 text-white/80"
+            className="p-1 rounded-md hover:bg-[var(--btn-hover)] text-[var(--text-secondary)]"
             title={`Toggle size (${size === "lg" ? "shrink" : "expand"})`}
           >
             <ArrowsPointingOutIcon className="h-4 w-4" />
@@ -90,7 +93,7 @@ export default function SortableWidget({
           {onRemove && (
             <button
               onClick={onRemove}
-              className="p-1 rounded-md hover:bg-white/10 text-white/80"
+              className="p-1 rounded-md hover:bg-[var(--btn-hover)] text-[var(--text-secondary)]"
               title="Remove widget"
             >
               <XMarkIcon className="h-4 w-4" />
