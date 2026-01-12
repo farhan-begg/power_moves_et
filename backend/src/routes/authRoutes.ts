@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 import User from "../models/User";
 import Transaction from "../models/Transaction";
 import PlaidItem from "../models/PlaidItem";
-import Transaction from "../models/Transaction";
 import plaidClient from "../services/plaidService";
 import { decrypt } from "../utils/cryptoUtils";
 import { protect, type AuthRequest } from "../middleware/authMiddleware";
