@@ -167,3 +167,63 @@ export const fetchPlaidAccountsArray = async (
   const res = await fetchPlaidAccounts(token, opts);
   return res.accounts ?? [];
 };
+
+/* ========= New: Sync status + trigger-if-needed ========= */
+export type SyncStatus = {
+  isSyncing: boolean;
+  lastGoodSyncAt: string | null;
+  lastAttemptAt: string | null;
+  cooldownRemainingMs: number;
+  hasAnyTransactions: boolean;
+};
+
+export async function fetchSyncStatus(token: string): Promise<SyncStatus> {
+  const { data } = await http.get<{
+    isSyncing: boolean;
+    lastGoodSyncAt: string | null;
+    lastAttemptAt: string | null;
+    cooldownRemainingMs: number;
+    hasAnyTransactions: boolean;
+  }>("/plaid/sync-status", auth(token));
+  return {
+    isSyncing: !!data.isSyncing,
+    lastGoodSyncAt: data.lastGoodSyncAt ?? null,
+    lastAttemptAt: data.lastAttemptAt ?? null,
+    cooldownRemainingMs: Number(data.cooldownRemainingMs ?? 0),
+    hasAnyTransactions: !!data.hasAnyTransactions,
+  };
+}
+
+export async function triggerSyncIfNeeded(
+  token: string,
+  opts?: { force?: boolean; days?: number }
+): Promise<{
+  triggered: boolean;
+  alreadyRunning?: boolean;
+  reason?: "cooldown";
+  status: SyncStatus;
+}> {
+  const { data } = await http.post(
+    "/plaid/sync-if-needed",
+    {
+      force: opts?.force ?? false,
+      days: opts?.days ?? 90,
+    },
+    auth(token)
+  );
+
+  const normalizedStatus: SyncStatus = {
+    isSyncing: !!data?.status?.isSyncing,
+    lastGoodSyncAt: data?.status?.lastGoodSyncAt ?? null,
+    lastAttemptAt: data?.status?.lastAttemptAt ?? null,
+    cooldownRemainingMs: Number(data?.status?.cooldownRemainingMs ?? 0),
+    hasAnyTransactions: !!data?.status?.hasAnyTransactions,
+  };
+
+  return {
+    triggered: !!data?.triggered,
+    alreadyRunning: !!data?.alreadyRunning,
+    reason: data?.reason,
+    status: normalizedStatus,
+  };
+}

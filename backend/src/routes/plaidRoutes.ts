@@ -16,6 +16,7 @@ import Transaction from "../models/Transaction"; // ADD THIS IMPORT at top
 const router = Router();
 
 const ACCOUNTS_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+const TRANSACTIONS_COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 hours
 const ALL_ITEM_SENTINELS = new Set(["__all__", "all"]);
 
 // ---------- helpers ----------
@@ -460,6 +461,51 @@ router.get("/net-worth", protect, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Utility: returns user's current sync status across items
+async function getUserSyncStatus(userId: mongoose.Types.ObjectId) {
+  const items = await PlaidItem.find({ userId }).select(
+    "lastGoodSyncAt lastSyncAttemptAt isSyncing status"
+  );
+
+  let isSyncing = false;
+  let latestGood: Date | null = null;
+  let latestAttempt: Date | null = null;
+
+  for (const it of items) {
+    if (it.isSyncing) isSyncing = true;
+    if (it.lastGoodSyncAt && (!latestGood || it.lastGoodSyncAt > latestGood)) {
+      latestGood = it.lastGoodSyncAt;
+    }
+    if (it.lastSyncAttemptAt && (!latestAttempt || it.lastSyncAttemptAt > latestAttempt)) {
+      latestAttempt = it.lastSyncAttemptAt;
+    }
+  }
+
+  const now = Date.now();
+  const lastGoodMs = latestGood ? latestGood.getTime() : 0;
+  const cooldownRemainingMs = lastGoodMs
+    ? Math.max(0, TRANSACTIONS_COOLDOWN_MS - (now - lastGoodMs))
+    : 0;
+
+  const hasAnyTransactions =
+    (await Transaction.exists({ userId })) != null;
+
+  return {
+    isSyncing,
+    lastGoodSyncAt: latestGood,
+    lastAttemptAt: latestAttempt,
+    cooldownRemainingMs,
+    hasAnyTransactions,
+  };
+}
+
+// GET /api/plaid/sync-status
+router.get("/sync-status", protect, async (req: AuthRequest, res: Response) => {
+  const userId = new mongoose.Types.ObjectId(String(req.user));
+  const status = await getUserSyncStatus(userId);
+  return res.json(status);
+});
+
 // POST /api/plaid/sync-transactions?days=90&itemId=optional
 router.post("/sync-transactions", protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -469,13 +515,22 @@ router.post("/sync-transactions", protect, async (req: AuthRequest, res: Respons
     const itemIdParam = req.query.itemId ? String(req.query.itemId) : null;
 
     // choose exact item if itemId passed, else primary, else newest
-    const item =
+    let item =
       (itemIdParam &&
         (await PlaidItem.findOne({ userId, itemId: itemIdParam, status: "active" }))) ||
       (await PlaidItem.findOne({ userId, isPrimary: true, status: "active" })) ||
       (await PlaidItem.findOne({ userId, status: "active" }).sort({ createdAt: -1 }));
 
     if (!item) return res.status(400).json({ error: "No active Plaid item" });
+
+    // Acquire a simple per-item "lock" to avoid concurrent syncs for the same item
+    const lock = await PlaidItem.updateOne(
+      { _id: item._id, $or: [{ isSyncing: { $exists: false } }, { isSyncing: false }] },
+      { $set: { isSyncing: true, lastSyncAttemptAt: new Date() } }
+    );
+    if (!lock.modifiedCount) {
+      return res.status(202).json({ ok: true, alreadyRunning: true });
+    }
 
     const accessToken = decrypt(item.accessToken);
 
@@ -557,10 +612,14 @@ router.post("/sync-transactions", protect, async (req: AuthRequest, res: Respons
       if (offset >= total || txns.length === 0) break;
     }
 
-    await PlaidItem.updateOne(
-      { _id: item._id },
-      { $set: { lastGoodSyncAt: new Date(), lastError: null, status: "active" } }
-    );
+    await PlaidItem.updateOne({ _id: item._id }, {
+      $set: {
+        lastGoodSyncAt: new Date(),
+        lastError: null,
+        status: "active",
+        isSyncing: false,
+      },
+    });
 
     return res.json({
       ok: true,
@@ -574,10 +633,172 @@ router.post("/sync-transactions", protect, async (req: AuthRequest, res: Respons
     const plaidErr = err?.response?.data;
     console.error("❌ /sync-transactions error:", plaidErr || err?.message || err);
 
+    // Best effort: clear syncing flag on any one item if we can infer it
+    try {
+      const userId = new mongoose.Types.ObjectId(String((req as any).user));
+      await PlaidItem.updateMany({ userId }, { $set: { isSyncing: false } });
+    } catch {}
+
     return res.status(500).json({
       error: "Sync failed",
       details: plaidErr || err?.message || String(err),
     });
+  }
+});
+
+// POST /api/plaid/sync-if-needed
+// body: { force?: boolean, days?: number }
+router.post("/sync-if-needed", protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(String(req.user));
+    const force = Boolean(req.body?.force);
+    const days = Math.max(1, Math.min(730, Number(req.body?.days || 90)));
+
+    const status = await getUserSyncStatus(userId);
+
+    // Choose item: primary or newest active
+    const item =
+      (await PlaidItem.findOne({ userId, isPrimary: true, status: "active" })) ||
+      (await PlaidItem.findOne({ userId, status: "active" }).sort({ createdAt: -1 }));
+
+    if (!item) {
+      return res.status(400).json({ error: "No active Plaid item" });
+    }
+
+    // Decide if we should trigger
+    const shouldTrigger =
+      force || !status.hasAnyTransactions || status.cooldownRemainingMs === 0;
+
+    if (!shouldTrigger) {
+      return res.json({
+        triggered: false,
+        reason: "cooldown",
+        status,
+      });
+    }
+
+    // Try to acquire lock
+    const lock = await PlaidItem.updateOne(
+      { _id: item._id, $or: [{ isSyncing: { $exists: false } }, { isSyncing: false }] },
+      { $set: { isSyncing: true, lastSyncAttemptAt: new Date() } }
+    );
+
+    if (!lock.modifiedCount) {
+      // someone else is syncing already
+      const fresh = await getUserSyncStatus(userId);
+      return res.status(202).json({
+        triggered: false,
+        alreadyRunning: true,
+        status: fresh,
+      });
+    }
+
+    // Fire-and-forget background job
+    (async () => {
+      try {
+        const accessToken = decrypt(item.accessToken);
+
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        const endDate = new Date();
+
+        const start = startDate.toISOString().split("T")[0];
+        const end = endDate.toISOString().split("T")[0];
+
+        let offset = 0;
+        const count = 100;
+
+        const accountNameMap: Record<string, string> = {};
+
+        while (true) {
+          const resp = await plaidClient.transactionsGet({
+            access_token: accessToken,
+            start_date: start,
+            end_date: end,
+            options: { count, offset },
+          });
+
+          const txns = resp.data.transactions || [];
+          const accts = resp.data.accounts || [];
+
+          for (const a of accts) {
+            accountNameMap[a.account_id] = a.name || a.official_name || "Account";
+          }
+
+          for (const txn of txns) {
+            const rawAmount = Number(txn.amount) || 0;
+
+            const isIncomeCategory =
+              txn.personal_finance_category?.primary &&
+              String(txn.personal_finance_category.primary).toUpperCase().startsWith("INCOME");
+
+            const type: "income" | "expense" =
+              rawAmount < 0 || isIncomeCategory ? "income" : "expense";
+
+            const amount = Math.abs(rawAmount);
+
+            const category =
+              txn.personal_finance_category?.detailed ||
+              txn.personal_finance_category?.primary ||
+              txn.category?.[0] ||
+              "Uncategorized";
+
+            const description = txn.merchant_name || txn.name || "Transaction";
+
+            await Transaction.updateOne(
+              { userId, plaidTxId: txn.transaction_id },
+              {
+                $set: {
+                  userId,
+                  source: "plaid",
+                  plaidTxId: txn.transaction_id,
+                  accountId: txn.account_id,
+                  accountName: accountNameMap[txn.account_id] || undefined,
+                  type,
+                  category,
+                  amount,
+                  date: new Date(txn.date),
+                  description,
+                },
+              },
+              { upsert: true }
+            );
+          }
+
+          offset += txns.length;
+          if (offset >= (resp.data.total_transactions || 0) || txns.length === 0) break;
+        }
+
+        await PlaidItem.updateOne(
+          { _id: item._id },
+          {
+            $set: {
+              lastGoodSyncAt: new Date(),
+              lastError: null,
+              status: "active",
+              isSyncing: false,
+            },
+          }
+        );
+      } catch (e: any) {
+        console.error("❌ background sync failed:", e?.response?.data || e?.message || e);
+        try {
+          await PlaidItem.updateOne(
+            { _id: item._id },
+            { $set: { isSyncing: false, lastError: e?.message || String(e) } }
+          );
+        } catch {}
+      }
+    })();
+
+    const fresh = await getUserSyncStatus(userId);
+    return res.status(202).json({
+      triggered: true,
+      status: fresh,
+    });
+  } catch (err: any) {
+    console.error("❌ /sync-if-needed error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to start sync-if-needed" });
   }
 });
 

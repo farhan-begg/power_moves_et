@@ -28,6 +28,10 @@ export interface IPlaidItem extends Document {
   lastGoodSyncAt?: Date | null;
   lastError?: string | null;
 
+  // Transactions sync state (optional, added over time)
+  isSyncing?: boolean | null;
+  lastSyncAttemptAt?: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,6 +71,10 @@ const PlaidItemSchema = new Schema<IPlaidItem>(
 
     lastGoodSyncAt: { type: Date, default: null },
     lastError: { type: String, default: null },
+
+    // optional fields for sync status
+    isSyncing: { type: Boolean, default: false },
+    lastSyncAttemptAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

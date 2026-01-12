@@ -22,7 +22,7 @@ import { reorder, removeWidget, ensureDefaults } from "../features/widgets/widge
 import GlobalAccountFilter from "../components/filters/GlobalAccountFilter";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { syncPlaidTransactions } from "../api/plaid";
+import { fetchSyncStatus, triggerSyncIfNeeded } from "../api/plaid";
 
 import LogoLoader from "../components/common/LogoLoader";
 import ThemeToggle from "../components/common/ThemeToggle";
@@ -68,40 +68,73 @@ export default function Dashboard() {
     ]);
   }, [queryClient]);
 
+  const pollUntilReady = React.useCallback(async () => {
+    if (!token) return;
+    const started = Date.now();
+    const TIMEOUT_MS = 60_000;
+    const INTERVAL_MS = 1500;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const st = await fetchSyncStatus(token);
+      if (!st.isSyncing && st.hasAnyTransactions) return;
+      if (Date.now() - started > TIMEOUT_MS) return;
+      await new Promise((r) => setTimeout(r, INTERVAL_MS));
+    }
+  }, [token]);
+
   const runInitialSync = React.useCallback(async () => {
     if (!token) return;
-
     setShowInitialLoader(true);
     try {
-      await syncPlaidTransactions(token);
+      const res = await triggerSyncIfNeeded(token);
+      // If a sync was triggered or is already running, poll until ready
+      if (res.triggered || res.status.isSyncing || !res.status.hasAnyTransactions) {
+        await pollUntilReady();
+      }
       await invalidateFinanceQueries();
     } catch (e) {
       console.error("❌ initial sync failed:", e);
     } finally {
-      localStorage.setItem(INITIAL_SYNC_KEY, "1");
+      // Only mark done if data exists (so future loads can skip)
+      try {
+        const st = await fetchSyncStatus(token);
+        if (st.hasAnyTransactions) localStorage.setItem(INITIAL_SYNC_KEY, "1");
+      } catch {}
       setShowInitialLoader(false);
     }
-  }, [token, invalidateFinanceQueries]);
+  }, [token, invalidateFinanceQueries, pollUntilReady]);
 
   const handleManualRefresh = React.useCallback(async () => {
     if (!token || isSyncing) return;
-
     try {
       setIsSyncing(true);
-      await syncPlaidTransactions(token);
+      await triggerSyncIfNeeded(token, { force: true });
+      await pollUntilReady();
       await invalidateFinanceQueries();
     } catch (e) {
       console.error("❌ Manual sync failed:", e);
     } finally {
       setIsSyncing(false);
     }
-  }, [token, isSyncing, invalidateFinanceQueries]);
+  }, [token, isSyncing, invalidateFinanceQueries, pollUntilReady]);
 
   // ✅ First-time sync when dashboard is reached (PlaidLinkedGate ensures they’re linked already)
   React.useEffect(() => {
     if (!token) return;
     const alreadyDone = localStorage.getItem(INITIAL_SYNC_KEY) === "1";
-    if (!alreadyDone) runInitialSync();
+    if (alreadyDone) return;
+    (async () => {
+      try {
+        const st = await fetchSyncStatus(token);
+        if (st.hasAnyTransactions) {
+          localStorage.setItem(INITIAL_SYNC_KEY, "1");
+          setShowInitialLoader(false);
+          return;
+        }
+      } catch {}
+      await runInitialSync();
+    })();
   }, [token, runInitialSync]);
 
   // ✅ When plaid links from anywhere, refresh data + userInfo
