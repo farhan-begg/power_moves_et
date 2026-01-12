@@ -398,6 +398,7 @@ export default function LandingPage() {
           backdropFilter: "blur(6px)",
           WebkitBackdropFilter: "blur(6px)",
           willChange: "transform",
+          position: "relative",
         }}
       >
    
@@ -415,16 +416,34 @@ export default function LandingPage() {
               <a href="#testimonials" className="hover:text-white">Stories</a>
               <a href="#faq" className="hover:text-white">FAQ</a>
             </nav>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative z-10">
               <button
                 onClick={toLogin}
-                className="px-3 py-1.5 text-sm rounded-lg bg-white/10 hover:bg-white/15 ring-1 ring-white/10"
+                onTouchStart={(e) => {
+                  e.currentTarget.style.opacity = "0.8";
+                  e.currentTarget.style.transform = "scale(0.98)";
+                }}
+                onTouchEnd={(e) => {
+                  e.currentTarget.style.opacity = "1";
+                  e.currentTarget.style.transform = "scale(1)";
+                }}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/10 hover:bg-white/15 active:bg-white/20 ring-1 ring-white/10 touch-manipulation cursor-pointer transition-all min-h-[44px] min-w-[44px] relative z-10"
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative" }}
               >
                 Log in
               </button>
               <button
                 onClick={toApp}
-                className="px-3 py-1.5 text-sm rounded-lg bg-emerald-500/20 hover:bg-emerald-500/25 ring-1 ring-emerald-400/20 text-emerald-200 inline-flex items-center gap-1.5"
+                onTouchStart={(e) => {
+                  e.currentTarget.style.opacity = "0.8";
+                  e.currentTarget.style.transform = "scale(0.98)";
+                }}
+                onTouchEnd={(e) => {
+                  e.currentTarget.style.opacity = "1";
+                  e.currentTarget.style.transform = "scale(1)";
+                }}
+                className="px-3 py-1.5 text-sm rounded-lg bg-emerald-500/20 hover:bg-emerald-500/25 active:bg-emerald-500/30 ring-1 ring-emerald-400/20 text-emerald-200 inline-flex items-center gap-1.5 touch-manipulation cursor-pointer transition-all min-h-[44px] relative z-10"
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative" }}
               >
                 Launch App <ArrowRightIcon className="h-4 w-4" />
               </button>
@@ -469,7 +488,16 @@ export default function LandingPage() {
               <div className="mt-6 flex flex-col sm:flex-row gap-3" data-reveal>
                 <button
                   onClick={toApp}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/25 ring-1 ring-emerald-400/30 text-emerald-200"
+                  onTouchStart={(e) => {
+                    e.currentTarget.style.opacity = "0.8";
+                    e.currentTarget.style.transform = "scale(0.98)";
+                  }}
+                  onTouchEnd={(e) => {
+                    e.currentTarget.style.opacity = "1";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/25 active:bg-emerald-500/30 ring-1 ring-emerald-400/30 text-emerald-200 touch-manipulation cursor-pointer transition-all min-h-[44px] relative z-10"
+                  style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative" }}
                 >
                   Get Started
                   <ArrowRightIcon className="h-4 w-4" />
@@ -719,13 +747,31 @@ export default function LandingPage() {
           <div className="mt-6 flex items-center justify-center gap-3" data-reveal>
             <button
               onClick={toApp}
-              className="px-5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/25 ring-1 ring-emerald-400/30 text-emerald-200 inline-flex items-center gap-2"
+              onTouchStart={(e) => {
+                e.currentTarget.style.opacity = "0.8";
+                e.currentTarget.style.transform = "scale(0.98)";
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.opacity = "1";
+                e.currentTarget.style.transform = "scale(1)";
+              }}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/25 active:bg-emerald-500/30 ring-1 ring-emerald-400/30 text-emerald-200 inline-flex items-center gap-2 touch-manipulation cursor-pointer transition-all min-h-[44px] relative z-10"
+              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative" }}
             >
               Launch App <ArrowRightIcon className="h-4 w-4" />
             </button>
             <button
               onClick={toLogin}
-              className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 ring-1 ring-white/10 inline-flex items-center gap-2"
+              onTouchStart={(e) => {
+                e.currentTarget.style.opacity = "0.8";
+                e.currentTarget.style.transform = "scale(0.98)";
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.opacity = "1";
+                e.currentTarget.style.transform = "scale(1)";
+              }}
+              className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 ring-1 ring-white/10 inline-flex items-center gap-2 touch-manipulation cursor-pointer transition-all min-h-[44px] relative z-10"
+              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative" }}
             >
               Log in <ArrowPathIcon className="h-4 w-4" />
             </button>
@@ -1006,12 +1052,21 @@ function PriceCard({
       </ul>
       <button
         onClick={onClick}
+        onTouchStart={(e) => {
+          e.currentTarget.style.opacity = "0.8";
+          e.currentTarget.style.transform = "scale(0.98)";
+        }}
+        onTouchEnd={(e) => {
+          e.currentTarget.style.opacity = "1";
+          e.currentTarget.style.transform = "scale(1)";
+        }}
         className={[
-          "mt-5 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 ring-1",
+          "mt-5 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 ring-1 touch-manipulation cursor-pointer transition-all min-h-[44px] relative z-10",
           featured
-            ? "bg-emerald-500/20 hover:bg-emerald-500/25 ring-emerald-400/30 text-emerald-200"
-            : "bg-white/5 hover:bg-white/10 ring-white/10",
+            ? "bg-emerald-500/20 hover:bg-emerald-500/25 active:bg-emerald-500/30 ring-emerald-400/30 text-emerald-200"
+            : "bg-white/5 hover:bg-white/10 active:bg-white/15 ring-white/10",
         ].join(" ")}
+        style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative" }}
       >
         {cta} <ArrowRightIcon className="h-4 w-4" />
       </button>
