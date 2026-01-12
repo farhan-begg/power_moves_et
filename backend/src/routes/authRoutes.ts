@@ -3,7 +3,8 @@ import { Router, type Response } from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
 import Transaction from "../models/Transaction";
-import PlaidItem from "../models/PlaidItem"; // ✅ you said you used to have this
+import PlaidItem from "../models/PlaidItem";
+import Transaction from "../models/Transaction";
 import plaidClient from "../services/plaidService";
 import { decrypt } from "../utils/cryptoUtils";
 import { protect, type AuthRequest } from "../middleware/authMiddleware";
@@ -119,60 +120,104 @@ router.post("/login", async (req, res) => {
 
             const accessToken = decrypt(encryptedToken);
 
-            // Minimal: transactionsGet (note: it paginates; this matches your old behavior)
-            const plaidResponse = await plaidClient.transactionsGet({
-              access_token: accessToken,
-              start_date: startDate.toISOString().split("T")[0],
-              end_date: endDate.toISOString().split("T")[0],
-            });
-
-            const plaidTransactions = plaidResponse.data.transactions || [];
-            const accounts = plaidResponse.data.accounts || [];
-
-            // map Plaid account_id -> account name for UI
-            const accountNameMap: Record<string, string> = {};
-            for (const acct of accounts) {
-              accountNameMap[acct.account_id] =
-                acct.name || acct.official_name || "Account";
+            // ✅ COST OPTIMIZATION: Use incremental sync on login
+            const itemDoc = await PlaidItem.findOne({ userId, itemId: (item as any).itemId });
+            let loginStartDate = startDate;
+            if (itemDoc?.lastGoodSyncAt) {
+              const daysSinceLastSync = Math.floor(
+                (Date.now() - itemDoc.lastGoodSyncAt.getTime()) / (1000 * 60 * 60 * 24)
+              );
+              // Only fetch last 7 days if synced recently, otherwise use full range
+              if (daysSinceLastSync < 7) {
+                loginStartDate = new Date(itemDoc.lastGoodSyncAt);
+                loginStartDate.setDate(loginStartDate.getDate() - 1); // 1 day overlap
+              }
             }
 
-            // ✅ Save each transaction with plaidTxId + accountId so filters work
-            for (const txn of plaidTransactions) {
-              const rawAmount = Number(txn.amount) || 0;
+            // ✅ COST OPTIMIZATION: Properly paginate transactions
+            let offset = 0;
+            const count = 100;
+            const accountNameMap: Record<string, string> = {};
+            const bulkOps: any[] = [];
+            const BATCH_SIZE = 500;
+            let totalProcessed = 0;
 
-// ✅ Plaid sign is the best signal
-const type: "income" | "expense" =
-  rawAmount < 0 ? "income" : "expense";
+            while (true) {
+              const plaidResponse = await plaidClient.transactionsGet({
+                access_token: accessToken,
+                start_date: loginStartDate.toISOString().split("T")[0],
+                end_date: endDate.toISOString().split("T")[0],
+                options: { count, offset },
+              });
 
-const amount = Math.abs(rawAmount);
+              const plaidTransactions = plaidResponse.data.transactions || [];
+              const accounts = plaidResponse.data.accounts || [];
+              const total = plaidResponse.data.total_transactions || 0;
 
-const category =
-  txn.personal_finance_category?.detailed ||
-  txn.personal_finance_category?.primary ||
-  txn.category?.[0] ||
-  "Uncategorized";
+              // Build account name map once per page
+              for (const acct of accounts) {
+                if (!accountNameMap[acct.account_id]) {
+                  accountNameMap[acct.account_id] =
+                    acct.name || acct.official_name || "Account";
+                }
+              }
 
-const description =
-  txn.merchant_name || txn.name || "Transaction";
+              // ✅ COST OPTIMIZATION: Batch operations instead of individual updates
+              for (const txn of plaidTransactions) {
+                const rawAmount = Number(txn.amount) || 0;
 
-await Transaction.updateOne(
-  { userId, plaidTxId: txn.transaction_id },
-  {
-    $set: {
-      userId,
-      source: "plaid",
-      plaidTxId: txn.transaction_id,
-      accountId: txn.account_id,
-      accountName: accountNameMap[txn.account_id] || undefined,
-      type,
-      category,
-      amount,
-      date: new Date(txn.date),
-      description,
-    },
-  },
-  { upsert: true }
-);
+                // ✅ Plaid sign is the best signal
+                const type: "income" | "expense" =
+                  rawAmount < 0 ? "income" : "expense";
+
+                const amount = Math.abs(rawAmount);
+
+                const category =
+                  txn.personal_finance_category?.detailed ||
+                  txn.personal_finance_category?.primary ||
+                  txn.category?.[0] ||
+                  "Uncategorized";
+
+                const description =
+                  txn.merchant_name || txn.name || "Transaction";
+
+                bulkOps.push({
+                  updateOne: {
+                    filter: { userId, plaidTxId: txn.transaction_id },
+                    update: {
+                      $set: {
+                        userId,
+                        source: "plaid",
+                        plaidTxId: txn.transaction_id,
+                        accountId: txn.account_id,
+                        accountName: accountNameMap[txn.account_id] || undefined,
+                        type,
+                        category,
+                        amount,
+                        date: new Date(txn.date),
+                        description,
+                      },
+                    },
+                    upsert: true,
+                  },
+                });
+
+                totalProcessed++;
+              }
+
+              // Execute bulk write when batch is full
+              if (bulkOps.length >= BATCH_SIZE) {
+                await Transaction.bulkWrite(bulkOps, { ordered: false });
+                bulkOps.length = 0;
+              }
+
+              offset += plaidTransactions.length;
+              if (offset >= total || plaidTransactions.length === 0) break;
+            }
+
+            // Execute remaining bulk operations
+            if (bulkOps.length > 0) {
+              await Transaction.bulkWrite(bulkOps, { ordered: false });
             }
 
             await PlaidItem.updateOne(
@@ -187,7 +232,7 @@ await Transaction.updateOne(
             );
 
             console.log(
-              `✅ Synced ${plaidTransactions.length} Plaid txns for ${user.email} (itemId=${(item as any).itemId})`
+              `✅ Synced ${totalProcessed} Plaid txns for ${user.email} (itemId=${(item as any).itemId})`
             );
           } catch (e: any) {
             console.error(
