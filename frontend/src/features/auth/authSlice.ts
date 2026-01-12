@@ -64,6 +64,9 @@ const authSlice = createSlice({
       .addCase(login.rejected, (state, action: PayloadAction<any>) => {
         state.loading = false;
         state.error = action.payload;
+        // Clear token on login failure
+        state.token = null;
+        localStorage.removeItem("token");
       })
       .addCase(register.pending, (state) => {
         state.loading = true;

@@ -8,6 +8,38 @@ export const http = axios.create({
   withCredentials: true, // 👈 ensures cookies/JWT are sent if you ever use them
 });
 
+// Helper function to clear all auth data
+const clearAuthData = () => {
+  // Clear localStorage
+  localStorage.removeItem("token");
+  
+  // Clear all cookies (if any exist)
+  document.cookie.split(";").forEach((c) => {
+    const eqPos = c.indexOf("=");
+    const name = eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim();
+    // Clear cookie by setting it to expire in the past
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+  });
+  
+  // Redirect to login if not already there
+  if (window.location.pathname !== "/login" && window.location.pathname !== "/register") {
+    window.location.href = "/login";
+  }
+};
+
+// Response interceptor to handle 401 errors globally
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Unauthorized - clear auth data and redirect to login
+      clearAuthData();
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Small helper to add Authorization header
 // src/api/http.ts
 export const auth = (token?: string | null) =>
