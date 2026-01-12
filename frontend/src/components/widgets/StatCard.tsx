@@ -189,10 +189,10 @@ export default function StatCard({
           loadingAccounts={loadingAccounts}
           showAccountSelect={showAccountSelect}
         />
-        <div className="mt-4 text-rose-300 text-sm">Failed to load.</div>
+        <div className="mt-4 text-[var(--negative)] text-sm">Failed to load.</div>
         <button
           onClick={() => refetch()}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20"
+          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--btn-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
         >
           <ArrowPathIcon className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           Retry
@@ -225,11 +225,11 @@ export default function StatCard({
 
         <div className="mt-3 flex items-end justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-white/60">Net Worth</div>
+            <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Net Worth</div>
             <div
               className={[
                 "mt-1 font-semibold font-mono tabular-nums text-3xl",
-                netPositive ? "text-emerald-300" : "text-rose-300",
+                netPositive ? "text-[var(--positive)]" : "text-[var(--negative)]",
               ].join(" ")}
             >
               {netPositive ? "+" : "-"}
@@ -238,7 +238,7 @@ export default function StatCard({
           </div>
 
           <div className="w-40">
-            <div className="flex items-center justify-between text-[11px] text-white/60">
+            <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
               <span>Debt Share</span>
               <span>
                 {(() => {
@@ -249,9 +249,9 @@ export default function StatCard({
                 })()}
               </span>
             </div>
-            <div className="mt-1 h-2 rounded-full bg-white/10">
+            <div className="mt-1 h-2 rounded-full bg-[var(--btn-bg)]">
               <div
-                className="h-2 rounded-full bg-rose-400/70"
+                className="h-2 rounded-full bg-[var(--negative)]"
                 style={{
                   width: (() => {
                     const base = Math.max(assets + Math.abs(debts), 0);
@@ -294,11 +294,11 @@ export default function StatCard({
 
       <div className="mt-3 flex items-end justify-between">
         <div>
-          <div className="text-xs uppercase tracking-wide text-white/60">Net</div>
+          <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Net</div>
           <div
             className={[
               "mt-1 font-semibold font-mono tabular-nums text-3xl",
-              netPositive ? "text-emerald-300" : "text-rose-300",
+              netPositive ? "text-[var(--positive)]" : "text-[var(--negative)]",
             ].join(" ")}
           >
             {netPositive ? "+" : "-"}
@@ -306,12 +306,12 @@ export default function StatCard({
           </div>
         </div>
         <div className="w-40">
-          <div className="flex items-center justify-between text-[11px] text-white/60">
+          <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
             <span>Spend</span>
             <span>{spendPct}%</span>
           </div>
-          <div className="mt-1 h-2 rounded-full bg-white/10">
-            <div className="h-2 rounded-full bg-rose-400/70" style={{ width: `${spendPct}%` }} />
+          <div className="mt-1 h-2 rounded-full bg-[var(--btn-bg)]">
+            <div className="h-2 rounded-full bg-[var(--negative)]" style={{ width: `${spendPct}%` }} />
           </div>
         </div>
       </div>

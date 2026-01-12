@@ -11,8 +11,8 @@ export interface PillProps {
 }
 
 const kindStyles = {
-  positive: "bg-emerald-400/10 text-[var(--positive)] ring-emerald-400/20",
-  negative: "bg-rose-400/10 text-[var(--negative)] ring-rose-400/20",
+  positive: "bg-[var(--positive-bg-soft)] text-[var(--positive)] ring-[var(--positive-ring)]",
+  negative: "bg-[var(--negative-bg-soft)] text-[var(--negative)] ring-[var(--negative-ring)]",
   neutral: "bg-[var(--btn-bg)] text-[var(--text-secondary)] ring-[var(--widget-ring)]",
 };
 

@@ -32,7 +32,7 @@ type PlaidAccount = {
 };
 
 const glass =
-  "rounded-2xl p-5 backdrop-blur-md bg-[var(--btn-bg)] border border-white/10 shadow-xl ring-1 ring-[var(--widget-ring)]";
+  "rounded-2xl p-5 backdrop-blur-md bg-[var(--widget-bg)] border border-[var(--widget-border)] shadow-xl ring-1 ring-[var(--widget-ring)]";
 
 const money = (n: number) =>
   n.toLocaleString("en-US", {
@@ -206,11 +206,11 @@ export default function TransactionsListWidget() {
 
   const RowIcon = ({ type }: { type: "income" | "expense" }) =>
     type === "expense" ? (
-      <div className="h-9 w-9 rounded-xl flex items-center justify-center bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20">
+      <div className="h-9 w-9 rounded-xl flex items-center justify-center bg-[var(--negative-bg-soft)] text-[var(--negative)] ring-1 ring-[var(--negative-ring)]">
         <ArrowDownRightIcon className="h-5 w-5" />
       </div>
     ) : (
-      <div className="h-9 w-9 rounded-xl flex items-center justify-center bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/20">
+      <div className="h-9 w-9 rounded-xl flex items-center justify-center bg-[var(--positive-bg-soft)] text-[var(--positive)] ring-1 ring-[var(--positive-ring)]">
         <ArrowUpRightIcon className="h-5 w-5" />
       </div>
     );
@@ -314,7 +314,7 @@ export default function TransactionsListWidget() {
     <div className={glass}>
       {/* selection bar */}
       {selectedIds.length > 0 && (
-        <div className="sticky top-0 z-10 mb-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-[var(--text-primary)] backdrop-blur-md ring-1 ring-[var(--widget-ring)]">
+        <div className="sticky top-0 z-10 mb-3 rounded-xl border border-[var(--widget-border)] bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] backdrop-blur-md ring-1 ring-[var(--widget-ring)]">
           <div className="flex items-center justify-between">
             <div>
               <span className="font-medium">{selectedIds.length}</span> selected —{" "}
@@ -322,7 +322,7 @@ export default function TransactionsListWidget() {
             </div>
             <button
               onClick={clearSelection}
-              className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 ring-1 ring-[var(--widget-ring)] hover:bg-white/10"
+              className="rounded-lg bg-[var(--btn-bg)] px-3 py-1.5 ring-1 ring-[var(--widget-ring)] hover:bg-[var(--btn-hover)]"
             >
               Clear
             </button>
@@ -364,8 +364,8 @@ export default function TransactionsListWidget() {
             className={[
               "px-2.5 py-1.5 rounded-md text-xs border transition-colors",
               preset === p
-                ? "bg-white/15 text-[var(--text-primary)] border-white/25"
-                : "bg-[var(--btn-bg)] text-[var(--text-secondary)] border-white/10 hover:bg-white/10",
+                ? "bg-[var(--btn-bg)] text-[var(--text-primary)] border-[var(--widget-border)]"
+                : "bg-[var(--btn-bg)] text-[var(--text-secondary)] border-[var(--widget-border)] hover:bg-[var(--btn-hover)]",
             ].join(" ")}
           >
             {p.toUpperCase()}
@@ -376,14 +376,14 @@ export default function TransactionsListWidget() {
           <div className="flex items-center gap-2">
             <input
               type="date"
-              className="rounded-md bg-[var(--btn-bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-white/20"
+              className="rounded-md bg-[var(--btn-bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-[var(--widget-ring)]"
               value={pendingStart}
               onChange={(e) => setPendingStart(e.target.value)}
             />
             <span className="text-[var(--text-muted)] text-xs">to</span>
             <input
               type="date"
-              className="rounded-md bg-[var(--btn-bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-white/20"
+              className="rounded-md bg-[var(--btn-bg)] px-2 py-1.5 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-[var(--widget-ring)]"
               value={pendingEnd}
               onChange={(e) => setPendingEnd(e.target.value)}
             />
@@ -391,25 +391,25 @@ export default function TransactionsListWidget() {
             <button
               onClick={applyCustomRange}
               disabled={!pendingStart || !pendingEnd}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--btn-bg)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--btn-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)] disabled:opacity-40"
             >
               Apply
             </button>
             <button
               onClick={resetCustomRange}
-              className="inline-flex items-center gap-2 rounded-lg bg-transparent px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+              className="inline-flex items-center gap-2 rounded-lg bg-transparent px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--btn-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
               title="Reset to applied dates"
             >
               Reset
             </button>
 
-            {dateError && <span className="text-[11px] text-rose-300 ml-2">{dateError}</span>}
+            {dateError && <span className="text-[11px] text-[var(--negative)] ml-2">{dateError}</span>}
           </div>
         )}
       </div>
 
       {/* error */}
-      {isError && <p className="text-rose-300">Failed to load transactions.</p>}
+      {isError && <p className="text-[var(--negative)]">Failed to load transactions.</p>}
 
       {/* empty */}
       {!isError && transactions.length === 0 && (
@@ -428,7 +428,7 @@ export default function TransactionsListWidget() {
       {/* results */}
       {!isError && transactions.length > 0 && (
         <>
-          <ul className="divide-y divide-white/10 transition-opacity duration-150" style={{ opacity: isFetching ? 0.85 : 1 }}>
+          <ul className="divide-y divide-[var(--divider)] transition-opacity duration-150" style={{ opacity: isFetching ? 0.85 : 1 }}>
             {transactions.map((t) => {
               const bank = bankNameFor(t);
               const isExpense = t.type === "expense";
@@ -478,7 +478,7 @@ export default function TransactionsListWidget() {
                         </div>
                       </div>
 
-                      <div className={`shrink-0 font-mono tabular-nums ${isExpense ? "text-rose-300" : "text-emerald-300"}`}>
+                      <div className={`shrink-0 font-mono tabular-nums ${isExpense ? "text-[var(--negative)]" : "text-[var(--positive)]"}`}>
                         {amountText}
                       </div>
                     </div>
@@ -489,8 +489,8 @@ export default function TransactionsListWidget() {
                       <span
                         className={`px-1.5 py-0.5 rounded-full uppercase tracking-wide text-[10px] ring-1 ${
                           isExpense
-                            ? "bg-rose-400/10 text-rose-300 ring-rose-400/20"
-                            : "bg-emerald-400/10 text-emerald-300 ring-emerald-400/20"
+                            ? "bg-[var(--negative-bg-soft)] text-[var(--negative)] ring-[var(--negative-ring)]"
+                            : "bg-[var(--positive-bg-soft)] text-[var(--positive)] ring-[var(--positive-ring)]"
                         }`}
                       >
                         {actionLabel}
@@ -525,7 +525,7 @@ export default function TransactionsListWidget() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || isFetching}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-[var(--btn-bg)] text-[var(--text-secondary)] disabled:opacity-40"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--widget-border)] bg-[var(--btn-bg)] text-[var(--text-secondary)] disabled:opacity-40"
               >
                 <ChevronLeftIcon className="h-4 w-4" />
                 Prev
@@ -536,7 +536,7 @@ export default function TransactionsListWidget() {
               <button
                 onClick={() => setPage((p) => Math.min(pages, p + 1))}
                 disabled={page >= pages}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 bg-[var(--btn-bg)] text-[var(--text-secondary)] disabled:opacity-40"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--widget-border)] bg-[var(--btn-bg)] text-[var(--text-secondary)] disabled:opacity-40"
               >
                 Next
                 <ChevronRightIcon className="h-4 w-4" />

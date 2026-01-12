@@ -14,6 +14,8 @@ import categoryRoutes from "./routes/categoryRoutes";
 import recurringRoutes from "./routes/recurringRoutes";
 import cryptoRoutes from "./routes/cryptoRoutes";
 import plaidRoutes from "./routes/plaidRoutes";
+import netWorthProjectionRoutes from "./routes/netWorthProjectionRoutes";
+import widgetPreferencesRoutes from "./routes/widgetPreferencesRoutes";
 dotenv.config();
 
 const app = express();
@@ -77,6 +79,8 @@ app.use("/api/goals", goalRoutes);
 app.use("/api/manual-accounts", manualAccountRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/recurring", recurringRoutes);
+app.use("/api/net-worth-projection", netWorthProjectionRoutes);
+app.use("/api/widget-preferences", widgetPreferencesRoutes);
 
 
 const RUN_DAILY_MS = 24 * 60 * 60 * 1000;

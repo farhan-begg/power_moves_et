@@ -12,7 +12,7 @@ import { motion, LayoutGroup } from "framer-motion";
 type Preset = "30d" | "90d" | "ytd" | "1y";
 
 const glass =
-  "relative overflow-hidden rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
+  "relative overflow-hidden rounded-2xl p-5 bg-[var(--widget-bg)] border border-[var(--widget-border)] shadow-xl ring-1 ring-[var(--widget-ring)]";
 
 const isRealAccountId = (v?: string | null) =>
   !!v && !["__all__", "all", "undefined", "null", ""].includes(String(v));
@@ -133,7 +133,7 @@ function Segmented({
 
   return (
     <LayoutGroup id={id}>
-      <div className="inline-flex items-center gap-0.5 rounded-full bg-white/5 p-1 ring-1 ring-white/10 shadow-inner">
+      <div className="inline-flex items-center gap-0.5 rounded-full bg-[var(--btn-bg)] p-1 ring-1 ring-[var(--widget-ring)] shadow-inner">
         {options.map((opt) => {
           const active = value === opt.value;
           return (
@@ -142,7 +142,7 @@ function Segmented({
               onClick={() => onChange(opt.value)}
               className={[
                 `relative ${pad} ${text} rounded-full transition-colors duration-150`,
-                active ? "text-white" : "text-white/60 hover:text-white/80 active:text-white",
+                active ? "text-[var(--text-primary)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] active:text-[var(--text-primary)]",
               ].join(" ")}
               style={{ WebkitTapHighlightColor: "transparent" }}
             >
@@ -150,14 +150,10 @@ function Segmented({
               {active && (
                 <motion.span
                   layoutId={`seg-thumb-${id}`}
-                  className="absolute inset-0 rounded-full"
+                  className="absolute inset-0 rounded-full bg-[var(--btn-hover)] border border-[var(--widget-border)]"
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
                   style={{
-                    background:
-                      "radial-gradient(120% 120% at 50% 50%, rgba(255,255,255,0.22), rgba(255,255,255,0.10))",
-                    boxShadow:
-                      "0 0 12px rgba(255,255,255,0.15) inset, 0 2px 8px rgba(0,0,0,0.2)",
-                    border: "1px solid rgba(255,255,255,0.18)",
+                    boxShadow: "0 0 12px rgba(0,0,0,0.08) inset, 0 2px 8px rgba(0,0,0,0.1)",
                   }}
                 />
               )}
@@ -263,10 +259,10 @@ export default function CategoryPieWidget() {
       <div className="mb-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold text-white truncate">
+            <h3 className="text-lg font-semibold text-[var(--text-primary)] truncate">
               {mode === "expense" ? "Spending by Category" : "Income by Category"}
             </h3>
-            <div className="text-xs text-white/60">
+            <div className="text-xs text-[var(--text-muted)]">
               {preset.toUpperCase()} · {accountId ? "Selected account" : "All accounts"}
             </div>
           </div>
@@ -304,13 +300,13 @@ export default function CategoryPieWidget() {
       <div className="relative">
         {/* subtle inner halo in donut center for depth */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-24 w-24 rounded-full bg-white/5 blur-[2px]" />
+          <div className="h-24 w-24 rounded-full bg-[var(--btn-bg)] blur-[2px]" />
         </div>
 
         {statsQ.isError ? (
-          <div className="text-rose-300 text-sm">Failed to load category stats.</div>
+          <div className="text-[var(--negative)] text-sm">Failed to load category stats.</div>
         ) : (pieData.length === 0) ? (
-          <div className="text-white/70 text-sm">
+          <div className="text-[var(--text-secondary)] text-sm">
             No {mode === "expense" ? "expense" : "income"} activity in this period.
           </div>
         ) : (
@@ -347,7 +343,7 @@ export default function CategoryPieWidget() {
                   innerRadius={64}
                   outerRadius={96}
                   paddingAngle={2}
-                  stroke="rgba(255,255,255,0.12)"
+                  stroke="var(--widget-border)"
                   strokeWidth={1}
                   isAnimationActive
                   {...({
@@ -377,14 +373,16 @@ export default function CategoryPieWidget() {
                 </Pie>
 
                 <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                  cursor={{ fill: "var(--widget-border)" }}
                   contentStyle={{
-                    background: "rgba(17,17,17,0.96)",
-                    border: "1px solid rgba(255,255,255,0.18)",
+                    background: "var(--widget-bg)",
+                    backdropFilter: "var(--widget-blur)",
+                    WebkitBackdropFilter: "var(--widget-blur)",
+                    border: "1px solid var(--widget-border)",
                     borderRadius: 12,
                   }}
-                  itemStyle={{ color: "#ffffff", fontSize: 12 }}
-                  labelStyle={{ color: "#ffffff", fontWeight: 600, fontSize: 12 }}
+                  itemStyle={{ color: "var(--text-primary)", fontSize: 12 }}
+                  labelStyle={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 12 }}
                   labelFormatter={(raw: any) => prettyLabel(String(raw))}
                   formatter={(val: any, _name: any, props: any) => {
                     const slice = Number(props?.payload?.value || 0);
@@ -409,11 +407,10 @@ export default function CategoryPieWidget() {
             <div
               className="rounded-2xl px-3.5 py-2 shadow-xl ring-1"
               style={{
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06))",
-                backdropFilter: "blur(6px)",
-                WebkitBackdropFilter: "blur(6px)",
-                borderColor: "rgba(255,255,255,0.20)",
+                background: "var(--widget-bg)",
+                backdropFilter: "var(--widget-blur)",
+                WebkitBackdropFilter: "var(--widget-blur)",
+                borderColor: "var(--widget-border)",
                 boxShadow: `0 8px 24px rgba(0,0,0,0.25), 0 0 0 0.6px ${accent}40, inset 0 0 0 0.6px ${accent}60`,
               }}
             >
@@ -424,13 +421,13 @@ export default function CategoryPieWidget() {
                 />
                 <div className="flex flex-col leading-none">
                   <span
-                    className="uppercase tracking-wide"
-                    style={{ fontSize: "clamp(10px, 1.1vw, 11px)", color: "rgba(255,255,255,0.75)" }}
+                    className="uppercase tracking-wide text-[var(--text-secondary)]"
+                    style={{ fontSize: "clamp(10px, 1.1vw, 11px)" }}
                   >
                     {mode === "expense" ? "Total Spending" : "Total Income"}
                   </span>
                   <span
-                    className="font-semibold text-white mt-0.5"
+                    className="font-semibold text-[var(--text-primary)] mt-0.5"
                     style={{ fontSize: "clamp(18px, 2.6vw, 28px)" }}
                   >
                     {money(total)}
@@ -458,17 +455,17 @@ export default function CategoryPieWidget() {
                 }}
                 title={`${nice} — ${money(row.value)}`}
                 className={[
-                  "h-9 w-9 rounded-full grid place-items-center ring-1 ring-white/10",
+                  "h-9 w-9 rounded-full grid place-items-center ring-1 ring-[var(--widget-ring)]",
                   "transition-all duration-150 ease-out",
                   "hover:ring-2 hover:-translate-y-0.5",
                   "active:scale-95 active:translate-y-0",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--widget-ring)]",
                 ].join(" ")}
                 style={{
                   background: active
                     ? `linear-gradient(135deg, ${color}30, ${color}15)`
-                    : "rgba(255,255,255,0.06)",
-                  borderColor: active ? `${color}60` : "rgba(255,255,255,0.12)",
+                    : "var(--btn-bg)",
+                  borderColor: active ? `${color}60` : "var(--widget-border)",
                   boxShadow: active ? `0 0 16px ${color}40, inset 0 0 8px ${color}20` : "none",
                   WebkitTapHighlightColor: "transparent",
                 }}

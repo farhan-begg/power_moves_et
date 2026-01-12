@@ -1,5 +1,6 @@
 // src/features/widgets/widgetsSlice.ts
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { createSlice, PayloadAction, createAsyncThunk } from "@reduxjs/toolkit";
+import { fetchWidgetPreferences, saveWidgetPreferences, type WidgetPreferences } from "../../api/widgetPreferences";
 
 export type WidgetType =
   | "plaid-connect"
@@ -18,8 +19,8 @@ export type WidgetType =
   | "goals"
   | "category-pie"
   | "upcoming-bills"
-  // 👇 NEW
-  | "crypto-portfolio";
+  | "crypto-portfolio"
+  | "net-worth-projection";
 
 export type WidgetSize = "sm" | "lg";
 
@@ -39,6 +40,43 @@ const genId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `w_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+// Async thunks for loading and saving preferences
+export const loadWidgetPreferences = createAsyncThunk(
+  "widgets/loadPreferences",
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        return rejectWithValue("No token");
+      }
+      const preferences = await fetchWidgetPreferences();
+      return preferences;
+    } catch (error: any) {
+      // If 404 or no preferences, return null to use defaults
+      if (error?.response?.status === 404) {
+        return null;
+      }
+      return rejectWithValue(error?.response?.data?.error || "Failed to load preferences");
+    }
+  }
+);
+
+export const persistWidgetPreferences = createAsyncThunk(
+  "widgets/persistPreferences",
+  async (preferences: WidgetPreferences, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        return rejectWithValue("No token");
+      }
+      const saved = await saveWidgetPreferences(preferences);
+      return saved;
+    } catch (error: any) {
+      return rejectWithValue(error?.response?.data?.error || "Failed to save preferences");
+    }
+  }
+);
+
 export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w1:  { id: "w1",  type: "plaid-connect",        title: "Connect your bank",   size: "sm" },
   w2:  { id: "w2",  type: "stat-today",           title: "Today",               size: "sm" },
@@ -49,15 +87,15 @@ export const DEFAULT_WIDGETS: Record<string, Widget> = {
   w7:  { id: "w7",  type: "transactions-list",    title: "Recent Spending",     size: "sm" },
   w8:  { id: "w8",  type: "net-worth",            title: "Net Worth",           size: "sm" },
   w9:  { id: "w9",  type: "accounts",             title: "Accounts",            size: "lg" },
-  w10: { id: "w10", type: "cards",                title: "Credit Cards",        size: "sm" },
-  w11: { id: "w11", type: "investments",          title: "Investments",         size: "sm" },
-  w12: { id: "w12", type: "stocks-portfolio",     title: "Stocks & ETFs",       size: "sm" },
-  w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" },
+  // w10: { id: "w10", type: "cards",                title: "Credit Cards",        size: "sm" }, // TODO: Fix widget
+  // w11: { id: "w11", type: "investments",          title: "Investments",         size: "sm" }, // TODO: Fix widget
+  // w12: { id: "w12", type: "stocks-portfolio",     title: "Stocks & ETFs",       size: "sm" }, // TODO: Fix widget
+  // w13: { id: "w13", type: "advice",               title: "AI Money Coach",      size: "lg" }, // TODO: Fix widget
   w14: { id: "w14", type: "goals",                title: "Goals",               size: "sm" },
   w15: { id: "w15", type: "category-pie",         title: "Category Summary",    size: "sm" },
   w16: { id: "w16", type: "upcoming-bills",       title: "Upcoming Bills",      size: "sm" },
-  // 👇 NEW default crypto widget (large by default)
-  w17: { id: "w17", type: "crypto-portfolio",     title: "Crypto Portfolio",    size: "lg" },
+  // w17: { id: "w17", type: "crypto-portfolio",     title: "Crypto Portfolio",    size: "lg" }, // TODO: Fix widget
+  w18: { id: "w18", type: "net-worth-projection", title: "Net Worth Projection", size: "lg" },
 };
 
 export const DEFAULT_ORDER = [
@@ -67,16 +105,29 @@ export const DEFAULT_ORDER = [
   "w5","w7",
   "w15",
   "w16",
-  "w9","w12",
-  "w10","w11",
-  // 👇 place crypto next to investments/stocks
-  "w17",
-  "w13",
+  "w18", // Net Worth Projection
+  "w9",
+  // "w12", // Stocks & ETFs - TODO: Fix widget
+  // "w10","w11", // Credit Cards, Investments - TODO: Fix widgets
+  // "w17", // Crypto Portfolio - TODO: Fix widget
+  // "w13", // AI Money Coach - TODO: Fix widget
 ];
+
+
+interface WidgetsState {
+  order: string[];
+  byId: Record<string, Widget>;
+  isLoading: boolean;
+  isSaving: boolean;
+  error: string | null;
+}
 
 const initialState: WidgetsState = {
   byId: { ...DEFAULT_WIDGETS },
   order: [...DEFAULT_ORDER],
+  isLoading: false,
+  isSaving: false,
+  error: null,
 };
 
 const widgetsSlice = createSlice({
@@ -119,11 +170,92 @@ const widgetsSlice = createSlice({
       if (w) w.size = w.size === "lg" ? "sm" : "lg";
     },
     ensureDefaults: (state) => {
+      // Ensure all default widgets exist
       for (const id of DEFAULT_ORDER) {
-        if (!state.byId[id]) state.byId[id] = { ...DEFAULT_WIDGETS[id] };
-        if (!state.order.includes(id)) state.order.push(id);
+        if (!state.byId[id] && DEFAULT_WIDGETS[id]) {
+          state.byId[id] = { ...DEFAULT_WIDGETS[id] };
+        }
+      }
+      // Ensure order contains all default widgets
+      const missingIds = DEFAULT_ORDER.filter(id => !state.order.includes(id));
+      if (missingIds.length > 0) {
+        state.order = [...state.order, ...missingIds];
+      }
+      // If order is empty, use defaults
+      if (state.order.length === 0) {
+        state.order = [...DEFAULT_ORDER];
       }
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      // Load preferences
+      .addCase(loadWidgetPreferences.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(loadWidgetPreferences.fulfilled, (state, action) => {
+        state.isLoading = false;
+        if (action.payload && action.payload.order && action.payload.order.length > 0 && action.payload.widgets && Object.keys(action.payload.widgets).length > 0) {
+          // Only update if we got valid preferences from backend
+          // Validate and cast widgets from backend
+          const widgets: Record<string, Widget> = {};
+          if (action.payload.widgets) {
+            for (const [id, widget] of Object.entries(action.payload.widgets)) {
+              // Validate widget type is a valid WidgetType
+              const validTypes: WidgetType[] = [
+                "plaid-connect", "stat-today", "stat-month", "stat-year",
+                "income-expense-chart", "bank-flow", "transactions-list",
+                "net-worth", "accounts", "cards", "investments",
+                "stocks-portfolio", "advice", "goals", "category-pie",
+                "upcoming-bills", "crypto-portfolio", "net-worth-projection"
+              ];
+              
+              if (validTypes.includes(widget.type as WidgetType)) {
+                widgets[id] = {
+                  id: widget.id,
+                  type: widget.type as WidgetType,
+                  title: widget.title,
+                  size: widget.size === "sm" || widget.size === "lg" ? widget.size : "sm",
+                };
+              }
+            }
+          }
+          
+          // Merge with defaults to ensure all default widgets exist
+          state.byId = { ...DEFAULT_WIDGETS, ...widgets };
+          
+          // Ensure order only contains valid widget IDs, fallback to defaults if empty
+          const validOrder = action.payload.order.filter((id: string) => state.byId[id]);
+          state.order = validOrder.length > 0 ? validOrder : [...DEFAULT_ORDER];
+        } else {
+          // No preferences found or empty, use defaults
+          state.order = [...DEFAULT_ORDER];
+          state.byId = { ...DEFAULT_WIDGETS };
+        }
+      })
+      .addCase(loadWidgetPreferences.rejected, (state, action) => {
+        state.isLoading = false;
+        // If error is "No token", use defaults (user not logged in)
+        if (action.payload === "No token") {
+          state.order = [...DEFAULT_ORDER];
+          state.byId = { ...DEFAULT_WIDGETS };
+        } else {
+          state.error = action.payload as string;
+        }
+      })
+      // Save preferences
+      .addCase(persistWidgetPreferences.pending, (state) => {
+        state.isSaving = true;
+        state.error = null;
+      })
+      .addCase(persistWidgetPreferences.fulfilled, (state) => {
+        state.isSaving = false;
+      })
+      .addCase(persistWidgetPreferences.rejected, (state, action) => {
+        state.isSaving = false;
+        state.error = action.payload as string;
+      });
   },
 });
 

@@ -17,12 +17,19 @@ import SortableWidget from "../components/widgets/SortableWidget";
 import { widgetRenderer } from "../components/widgets/registry";
 
 import { useAppDispatch, useAppSelector } from "../hooks/hooks";
-import { reorder, removeWidget, ensureDefaults } from "../features/widgets/widgetsSlice";
+import { 
+  reorder, 
+  removeWidget, 
+  ensureDefaults, 
+  loadWidgetPreferences, 
+  persistWidgetPreferences 
+} from "../features/widgets/widgetsSlice";
 
 import GlobalAccountFilter from "../components/filters/GlobalAccountFilter";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchSyncStatus, triggerSyncIfNeeded } from "../api/plaid";
+import { runRecurringDetection } from "../api/recurring";
 
 import LogoLoader from "../components/common/LogoLoader";
 import ThemeToggle from "../components/common/ThemeToggle";
@@ -55,10 +62,43 @@ export default function Dashboard() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  // ✅ Ensure default widgets once
+  // ✅ Load widget preferences on mount
   React.useEffect(() => {
-    dispatch(ensureDefaults());
-  }, [dispatch]);
+    if (token) {
+      dispatch(loadWidgetPreferences()).then((result) => {
+        // Always ensure defaults are present (in case preferences are incomplete)
+        dispatch(ensureDefaults());
+      });
+    } else {
+      // No token, use defaults
+      dispatch(ensureDefaults());
+    }
+  }, [dispatch, token]);
+
+  // ✅ Save widget preferences when they change (debounced)
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  React.useEffect(() => {
+    if (!token) return; // Don't save if not logged in
+    
+    // Clear previous timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Debounce save by 1 second
+    saveTimeoutRef.current = setTimeout(() => {
+      dispatch(persistWidgetPreferences({
+        order: order,
+        widgets: byId,
+      }));
+    }, 1000);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [dispatch, token, order, byId]);
 
   const invalidateFinanceQueries = React.useCallback(async () => {
     await Promise.all([
@@ -93,6 +133,17 @@ export default function Dashboard() {
         await pollUntilReady();
       }
       await invalidateFinanceQueries();
+      
+      // Run automatic recurring detection after sync completes
+      try {
+        const st = await fetchSyncStatus(token);
+        if (st.hasAnyTransactions && !st.isSyncing) {
+          await runRecurringDetection(token, 180);
+          await queryClient.invalidateQueries({ queryKey: ["recurring", "overview"] });
+        }
+      } catch (e) {
+        console.error("❌ Automatic recurring detection failed:", e);
+      }
     } catch (e) {
       console.error("❌ initial sync failed:", e);
     } finally {
@@ -103,7 +154,7 @@ export default function Dashboard() {
       } catch {}
       setShowInitialLoader(false);
     }
-  }, [token, invalidateFinanceQueries, pollUntilReady]);
+  }, [token, invalidateFinanceQueries, pollUntilReady, queryClient]);
 
   const handleManualRefresh = React.useCallback(async () => {
     if (!token || isSyncing) return;
@@ -119,23 +170,49 @@ export default function Dashboard() {
     }
   }, [token, isSyncing, invalidateFinanceQueries, pollUntilReady]);
 
-  // ✅ First-time sync when dashboard is reached (PlaidLinkedGate ensures they’re linked already)
+  // ✅ First-time sync when dashboard is reached (PlaidLinkedGate ensures they're linked already)
   React.useEffect(() => {
     if (!token) return;
     const alreadyDone = localStorage.getItem(INITIAL_SYNC_KEY) === "1";
-    if (alreadyDone) return;
+    if (alreadyDone) {
+      // Run automatic detection if sync was already done but detection hasn't run
+      const detectionDone = localStorage.getItem("RECURRING_DETECTION_DONE") === "1";
+      if (!detectionDone) {
+        (async () => {
+          try {
+            const st = await fetchSyncStatus(token);
+            if (st.hasAnyTransactions && !st.isSyncing) {
+              await runRecurringDetection(token, 180);
+              await queryClient.invalidateQueries({ queryKey: ["recurring", "overview"] });
+              localStorage.setItem("RECURRING_DETECTION_DONE", "1");
+            }
+          } catch (e) {
+            console.error("❌ Automatic recurring detection failed:", e);
+          }
+        })();
+      }
+      return;
+    }
     (async () => {
       try {
         const st = await fetchSyncStatus(token);
         if (st.hasAnyTransactions) {
           localStorage.setItem(INITIAL_SYNC_KEY, "1");
           setShowInitialLoader(false);
+          // Run automatic detection after confirming transactions exist
+          try {
+            await runRecurringDetection(token, 180);
+            await queryClient.invalidateQueries({ queryKey: ["recurring", "overview"] });
+            localStorage.setItem("RECURRING_DETECTION_DONE", "1");
+          } catch (e) {
+            console.error("❌ Automatic recurring detection failed:", e);
+          }
           return;
         }
       } catch {}
       await runInitialSync();
     })();
-  }, [token, runInitialSync]);
+  }, [token, runInitialSync, queryClient]);
 
   // ✅ When plaid links from anywhere, refresh data + userInfo
   React.useEffect(() => {

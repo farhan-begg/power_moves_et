@@ -117,16 +117,16 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
       <Glow positive={overallPositive} />
 
       <div className="flex items-baseline justify-between">
-        <h3 className="text-sm font-medium text-white/90">Goals</h3>
+        <h3 className="text-sm font-medium text-[var(--text-primary)]">Goals</h3>
         <div className="flex items-center gap-2">
-          {isLoading && <ArrowPathIcon className="h-4 w-4 animate-spin text-white/70" />}
+          {isLoading && <ArrowPathIcon className="h-4 w-4 animate-spin text-[var(--text-secondary)]" />}
           <Btn kind="ghost" onClick={() => qc.invalidateQueries({ queryKey: ["goals"] })}>
             <ArrowPathIcon className="h-4 w-4" /> Refresh
           </Btn>
         </div>
       </div>
 
-      {error && <div className="mt-3 text-sm text-rose-300">Failed to load goals</div>}
+      {error && <div className="mt-3 text-sm text-[var(--negative)]">Failed to load goals</div>}
 
       {/* Quick Create (glass) */}
       <FormCard title="Create goal">
@@ -212,26 +212,26 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
           const isEditing = editingId === g._id;
 
           return (
-            <div key={g._id} className="rounded-xl border border-white/10 bg-white/5 p-3 ring-1 ring-white/10">
+            <div key={g._id} className="rounded-xl border border-[var(--widget-border)] bg-[var(--btn-bg)] p-3 ring-1 ring-[var(--widget-ring)]">
               {/* Header */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="font-medium text-white truncate">{g.name}</div>
+                    <div className="font-medium text-[var(--text-primary)] truncate">{g.name}</div>
                     <span
                       className={[
                         "rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ring-1",
                         g.status === "completed"
-                          ? "bg-emerald-400/10 text-emerald-200 ring-emerald-400/20"
+                          ? "bg-[var(--positive-bg-soft)] text-[var(--positive)] ring-[var(--positive-ring)]"
                           : g.status === "paused"
-                          ? "bg-amber-400/10 text-amber-200 ring-amber-400/20"
-                          : "bg-white/10 text-white/70 ring-white/15",
+                          ? "bg-amber-400/10 text-amber-600 ring-amber-400/20"
+                          : "bg-[var(--btn-bg)] text-[var(--text-secondary)] ring-[var(--widget-ring)]",
                       ].join(" ")}
                     >
                       {g.status}
                     </span>
                   </div>
-                  <div className="text-[11px] text-white/60 mt-0.5">
+                  <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     {g.type.replace(/_/g, " ")} • {g.currency}
                   </div>
                 </div>
@@ -258,7 +258,7 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
                   ) : (
                     <>
                       <input
-                        className="w-28 rounded-md bg-white/10 px-2 py-1 text-xs text-white ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white/25"
+                        className="w-28 rounded-md bg-[var(--btn-bg)] px-2 py-1 text-xs text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
                         value={editTarget}
                         onChange={(e) => setEditTarget(e.target.value)}
                         onKeyDown={(e) => {
@@ -293,10 +293,10 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
 
               {/* Progress */}
               <div className="mt-2">
-                <div className="h-2 w-full rounded-full bg-white/10">
-                  <div className="h-2 rounded-full bg-emerald-400/70" style={{ width: `${pct}%` }} />
+                <div className="h-2 w-full rounded-full bg-[var(--btn-bg)]">
+                  <div className="h-2 rounded-full bg-[var(--positive)]" style={{ width: `${pct}%` }} />
                 </div>
-                <div className="mt-1 text-[11px] text-white/70">
+                <div className="mt-1 text-[11px] text-[var(--text-muted)]">
                   {money(g.currentAmount, g.currency)} / {money(g.targetAmount, g.currency)} ({Math.round(pct)}%)
                 </div>
               </div>
@@ -351,14 +351,14 @@ export default function GoalsWidget({ className = "" }: { className?: string }) 
 
               {/* Spending limit helpers */}
               {g.type === "spending_limit" && (
-                <div className="mt-2 text-sm flex flex-wrap items-center gap-2 text-white/80">
+                <div className="mt-2 text-sm flex flex-wrap items-center gap-2 text-[var(--text-secondary)]">
                   <span>
-                    Spent: <b className="text-white">{money(g.currentAmount, g.currency)}</b>
+                    Spent: <b className="text-[var(--text-primary)]">{money(g.currentAmount, g.currency)}</b>
                   </span>
                   <span>•</span>
                   <span>
                     Remaining:{" "}
-                    <b className="text-white">
+                    <b className="text-[var(--text-primary)]">
                       {money(Math.max(0, g.targetAmount - g.currentAmount), g.currency)}
                     </b>
                   </span>
@@ -386,10 +386,12 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 ring-1 ring-white/10 shadow-xl",
+        "relative overflow-hidden rounded-2xl p-5",
+        "bg-[var(--widget-bg)] border border-[var(--widget-border)] ring-1 ring-[var(--widget-ring)]",
         "transition-shadow hover:shadow-2xl",
         className,
       ].join(" ")}
+      style={{ backdropFilter: "var(--widget-blur)", WebkitBackdropFilter: "var(--widget-blur)" }}
     >
       {children}
     </div>
@@ -451,14 +453,14 @@ function Btn({
 }) {
   const cls =
     kind === "solid"
-      ? "bg-white/10 hover:bg-white/15 focus:ring-white/20"
-      : "bg-transparent hover:bg-white/10 focus:ring-white/20";
+      ? "bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] focus:ring-[var(--widget-ring)]"
+      : "bg-transparent hover:bg-[var(--btn-bg)] focus:ring-[var(--widget-ring)]";
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={[
-        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2",
+        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2",
         cls,
         disabled ? "opacity-50 cursor-not-allowed" : "",
         className,
@@ -482,7 +484,7 @@ function IconBtn({
     <button
       title={title}
       onClick={onClick}
-      className="inline-flex items-center justify-center rounded-md p-1.5 text-white/80 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+      className="inline-flex items-center justify-center rounded-md p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--btn-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]"
     >
       {children}
     </button>
@@ -497,9 +499,9 @@ function FormCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4 ring-1 ring-white/10 shadow-lg">
+    <div className="mt-3 rounded-2xl border border-[var(--widget-border)] bg-[var(--btn-bg)] p-4 ring-1 ring-[var(--widget-ring)] shadow-lg">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-white/90">{title}</h4>
+        <h4 className="text-sm font-medium text-[var(--text-primary)]">{title}</h4>
       </div>
       <Divider />
       {children}
@@ -511,10 +513,10 @@ function Field({ children, className = "" }: { children: React.ReactNode; classN
   return <div className={["flex flex-col gap-1", className].join(" ")}>{children}</div>;
 }
 function Label({ children }: { children: React.ReactNode }) {
-  return <label className="text-[11px] text-white/60">{children}</label>;
+  return <label className="text-[11px] text-[var(--text-muted)]">{children}</label>;
 }
 function Divider() {
-  return <div className="my-3 h-px w-full bg-white/10" />;
+  return <div className="my-3 h-px w-full bg-[var(--divider)]" />;
 }
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { prefix?: string };
@@ -523,14 +525,14 @@ function Input({ prefix, className = "", ...props }: InputProps) {
   if (prefix) {
     return (
       <div className="relative">
-        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-white/50">
+        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-[var(--text-muted)]">
           {prefix}
         </span>
         <input
           {...props}
           className={[
-            "w-full rounded-lg bg-white/10 pl-7 pr-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40",
-            "focus:outline-none focus:ring-white/20",
+            "w-full rounded-lg bg-[var(--btn-bg)] pl-7 pr-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] placeholder-[var(--text-muted)]",
+            "focus:outline-none focus:ring-[var(--widget-ring)]",
             ariaInvalid ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
             className,
           ].join(" ")}
@@ -542,8 +544,8 @@ function Input({ prefix, className = "", ...props }: InputProps) {
     <input
       {...props}
       className={[
-        "w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40",
-        "focus:outline-none focus:ring-white/20",
+        "w-full rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] placeholder-[var(--text-muted)]",
+        "focus:outline-none focus:ring-[var(--widget-ring)]",
         ariaInvalid ? "ring-rose-400/40 focus:ring-rose-400/50" : "",
         className,
       ].join(" ")}
@@ -582,7 +584,7 @@ function Select({
   return (
     <div className="relative">
       {leftIcon && (
-        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-white/60">
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
           {leftIcon}
         </span>
       )}
@@ -590,9 +592,9 @@ function Select({
         {...props}
         disabled={isDisabled}
         className={[
-          "w-full rounded-lg bg-white/10 pr-8 text-white ring-1 ring-white/10",
-          "placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20",
-          "appearance-none [color-scheme:dark] backdrop-blur-md",
+          "w-full rounded-lg bg-[var(--btn-bg)] pr-8 text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)]",
+          "placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]",
+          "appearance-none backdrop-blur-md",
           sizeCls,
           leftIcon ? "pl-8" : "px-3",
           isDisabled ? "opacity-60 cursor-not-allowed" : "",
@@ -600,11 +602,11 @@ function Select({
           className,
         ].join(" ")}
       >
-        {isLoading ? <option className="bg-slate-900 text-white">Loading…</option> : children}
+        {isLoading ? <option className="text-[var(--text-primary)]">Loading…</option> : children}
       </select>
       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
         {rightIcon ?? (
-          <svg viewBox="0 0 20 20" className="h-4 w-4 text-white/70">
+          <svg viewBox="0 0 20 20" className="h-4 w-4 text-[var(--text-secondary)]">
             <path
               fill="currentColor"
               d="M5.6 7.6a1 1 0 0 1 1.4 0L10 10.6l3-3a1 1 0 1 1 1.4 1.4l-3.7 3.7a1 1 0 0 1-1.4 0L5.6 9a1 1 0 0 1 0-1.4Z"

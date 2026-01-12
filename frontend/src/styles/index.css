@@ -21,6 +21,8 @@
   --widget-blur: blur(12px);
   --widget-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   --widget-ring: rgba(255, 255, 255, 0.1);
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --chart-tick: rgba(255, 255, 255, 0.75);
 
   --page-bg-from: #0f172a;
   --page-bg-to: #020617;
@@ -35,6 +37,11 @@
 
   --positive: #10b981;
   --negative: #f43f5e;
+  --positive-bg-soft: rgba(16, 185, 129, 0.12);
+  --positive-ring: rgba(16, 185, 129, 0.25);
+  --negative-bg-soft: rgba(244, 63, 94, 0.12);
+  --negative-ring: rgba(244, 63, 94, 0.25);
+  --divider: rgba(255, 255, 255, 0.10);
 
   --user-bg: #0f172a;
   --user-text: #ffffff;
@@ -44,11 +51,13 @@
 
 /* Light theme - Clean light colors with solid backgrounds */
 [data-theme="light"] {
-  --widget-bg: #ffffff;
-  --widget-border: #d1d5db;
-  --widget-blur: none;
-  --widget-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --widget-ring: rgba(0, 0, 0, 0.08);
+  --widget-bg: #fcfcfd; /* slightly off-white to reduce glare */
+  --widget-border: rgba(0, 0, 0, 0.10);
+  --widget-blur: blur(6px);
+  --widget-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.18);
+  --widget-ring: rgba(0, 0, 0, 0.06);
+  --chart-grid: rgba(0, 0, 0, 0.06);
+  --chart-tick: rgba(17, 24, 39, 0.66);
 
   --page-bg-from: #e5e7eb;
   --page-bg-to: #f3f4f6;
@@ -63,6 +72,11 @@
 
   --positive: #047857;
   --negative: #b91c1c;
+  --positive-bg-soft: rgba(4, 120, 87, 0.10);
+  --positive-ring: rgba(4, 120, 87, 0.18);
+  --negative-bg-soft: rgba(185, 28, 28, 0.10);
+  --negative-ring: rgba(185, 28, 28, 0.18);
+  --divider: #e5e7eb;
 
   --user-bg: #f3f4f6;
   --user-text: #030712;
@@ -77,6 +91,8 @@
   --widget-blur: none;
   --widget-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
   --widget-ring: rgba(255, 255, 255, 0.05);
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --chart-tick: rgba(249, 250, 251, 0.70);
 
   --page-bg-from: #111827;
   --page-bg-to: #111827;
@@ -91,6 +107,11 @@
 
   --positive: #34d399;
   --negative: #fb7185;
+  --positive-bg-soft: rgba(52, 211, 153, 0.12);
+  --positive-ring: rgba(52, 211, 153, 0.25);
+  --negative-bg-soft: rgba(251, 113, 133, 0.12);
+  --negative-ring: rgba(251, 113, 133, 0.25);
+  --divider: rgba(255, 255, 255, 0.08);
 
   --user-bg: #111827;
   --user-text: #f9fafb;

@@ -144,19 +144,19 @@ export default function BankFlowWidget() {
   }, [transactions, accMap, supportsAccountId, accounts]);
 
   if (isLoading || accLoading) return <p className="text-[var(--text-secondary)]">Loading…</p>;
-  if (isError) return <p className="text-rose-300">Failed to load bank flow.</p>;
+  if (isError) return <p className="text-[var(--negative)]">Failed to load bank flow.</p>;
 
   return (
-    <div className="flex flex-col divide-y divide-white/10">
+    <div className="flex flex-col divide-y divide-[var(--divider)]">
       {grouped.map((g) => {
         const netPos = g.net >= 0;
         return (
           <div key={g.key} className="py-3 flex items-center gap-4">
             <div
-              className={`h-10 w-10 rounded-xl flex items-center justify-center ring-1 ring-[var(--widget-ring)] ${
+              className={`h-10 w-10 rounded-xl flex items-center justify-center ring-1 ${
                 netPos
-                  ? "bg-emerald-400/10 text-emerald-300"
-                  : "bg-rose-400/10 text-rose-300"
+                  ? "bg-[var(--positive-bg-soft)] text-[var(--positive)] ring-[var(--positive-ring)]"
+                  : "bg-[var(--negative-bg-soft)] text-[var(--negative)] ring-[var(--negative-ring)]"
               }`}
             >
               {iconForSubtype(g.subtype)}
@@ -165,12 +165,12 @@ export default function BankFlowWidget() {
             <div className="flex-1 min-w-0">
               <div className="text-[var(--text-primary)] font-medium truncate">{g.name}</div>
               <div className="mt-1 flex flex-wrap gap-2 text-sm">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/10 ring-1 ring-emerald-400/20 text-emerald-300">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--positive-bg-soft)] ring-1 ring-[var(--positive-ring)] text-[var(--positive)]">
                   <ArrowUpRightIcon className="h-4 w-4" /> In:{" "}
                   <span className="font-mono tabular-nums">{money(g.income)}</span>
                 </span>
 
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-400/10 ring-1 ring-rose-400/20 text-rose-300">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--negative-bg-soft)] ring-1 ring-[var(--negative-ring)] text-[var(--negative)]">
                   <ArrowDownRightIcon className="h-4 w-4" /> Out:{" "}
                   <span className="font-mono tabular-nums">{money(g.expense)}</span>
                 </span>
@@ -180,7 +180,7 @@ export default function BankFlowWidget() {
             <div className="text-right">
               <div
                 className={`text-base font-semibold font-mono tabular-nums ${
-                  netPos ? "text-emerald-300" : "text-rose-300"
+                  netPos ? "text-[var(--positive)]" : "text-[var(--negative)]"
                 }`}
               >
                 {netPos ? "+" : "-"}

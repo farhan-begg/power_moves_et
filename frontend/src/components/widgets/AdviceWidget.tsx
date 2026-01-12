@@ -5,10 +5,11 @@ import { RootState } from "../../app/store";
 import { useQuery } from "@tanstack/react-query";
 import { listPositions } from "../../api/stocks";
 import { fetchSummary } from "../../api/transaction";
+import { GlassCard } from "../common";
 
 type Risk = "conservative" | "balanced" | "growth" | "aggressive";
 
-const glass = "rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
+const glass = "rounded-2xl p-5 backdrop-blur-md bg-[var(--widget-bg)] border border-[var(--widget-border)] shadow-xl ring-1 ring-[var(--widget-ring)]";
 
 export default function AdviceWidget() {
   const token = useSelector((s: RootState) => s.auth.token)!;
@@ -111,10 +112,10 @@ export default function AdviceWidget() {
   }
 
   return (
-    <div className={glass}>
+    <GlassCard>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">AI Money Coach</h3>
-        <div className="text-xs text-white/60">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)]">AI Money Coach</h3>
+        <div className="text-xs text-[var(--text-muted)]">
           Uses your portfolio + cashflow to suggest next steps.
         </div>
       </div>
@@ -122,9 +123,9 @@ export default function AdviceWidget() {
       {/* Controls */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-[11px] text-white/60">Risk tolerance</label>
+          <label className="text-[11px] text-[var(--text-muted)]">Risk tolerance</label>
           <select
-            className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+            className="w-full rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-[var(--widget-ring)]"
             value={risk}
             onChange={(e) => setRisk(e.target.value as Risk)}
           >
@@ -136,9 +137,9 @@ export default function AdviceWidget() {
         </div>
 
         <div>
-          <label className="text-[11px] text-white/60">Notes (optional)</label>
+          <label className="text-[11px] text-[var(--text-muted)]">Notes (optional)</label>
           <input
-            className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 placeholder-white/40 focus:outline-none focus:ring-white/20"
+            className="w-full rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-[var(--widget-ring)]"
             placeholder="E.g., saving for a house in 3 years"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -148,12 +149,12 @@ export default function AdviceWidget() {
 
       {/* Goals editor (simple) */}
       <div className="mt-3">
-        <label className="text-[11px] text-white/60">Goals</label>
+        <label className="text-[11px] text-[var(--text-muted)]">Goals</label>
         <div className="space-y-2 mt-1">
           {goals.map((g, i) => (
             <div key={i} className="grid gap-2 sm:grid-cols-3">
               <input
-                className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+                className="rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-[var(--widget-ring)]"
                 placeholder="Goal (e.g., Down payment)"
                 value={g.label}
                 onChange={(e) => {
@@ -161,7 +162,7 @@ export default function AdviceWidget() {
                 }}
               />
               <select
-                className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+                className="rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-[var(--widget-ring)]"
                 value={g.horizon}
                 onChange={(e) => {
                   const copy = [...goals]; copy[i] = { ...copy[i], horizon: e.target.value as any }; setGoals(copy);
@@ -172,7 +173,7 @@ export default function AdviceWidget() {
                 <option value="long">Long (5y+)</option>
               </select>
               <input
-                className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white ring-1 ring-white/10 focus:outline-none focus:ring-white/20"
+                className="rounded-lg bg-[var(--btn-bg)] px-3 py-2 text-sm text-[var(--text-primary)] ring-1 ring-[var(--widget-ring)] focus:outline-none focus:ring-[var(--widget-ring)]"
                 placeholder="Target amount (optional)"
                 inputMode="decimal"
                 value={g.target ?? ""}
@@ -187,7 +188,7 @@ export default function AdviceWidget() {
           ))}
           <button
             onClick={() => setGoals(g => [...g, { label: "", horizon: "medium" } as any])}
-            className="text-xs text-white/80 hover:text-white underline"
+            className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline"
           >
             + Add goal
           </button>
@@ -198,20 +199,21 @@ export default function AdviceWidget() {
         <button
           onClick={getAdvice}
           disabled={loading}
-          className="rounded-lg bg-emerald-500/90 px-3 py-2 text-sm text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50"
+          style={{ backgroundColor: "var(--positive)" }}
         >
           {loading ? "Analyzing…" : "Get Advice"}
         </button>
       </div>
 
       {/* Output */}
-      <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/90 whitespace-pre-wrap">
+      <div className="mt-4 rounded-xl border border-[var(--widget-border)] bg-[var(--widget-bg)] p-3 text-sm text-[var(--text-primary)] whitespace-pre-wrap">
         {advice || "Advice will appear here."}
       </div>
 
-      <div className="mt-2 text-[11px] text-white/50">
+      <div className="mt-2 text-[11px] text-[var(--text-muted)]">
         Educational only—this is not financial, investment, tax, or legal advice.
       </div>
-    </div>
+    </GlassCard>
   );
 }

@@ -5,6 +5,10 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+  widgetPreferences?: {
+    order: string[];
+    widgets: Record<string, any>;
+  };
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -20,6 +24,10 @@ const UserSchema = new Schema<IUser>(
       trim: true,
     },
     password: { type: String, required: true },
+    widgetPreferences: {
+      order: { type: [String], default: [] },
+      widgets: { type: Schema.Types.Mixed, default: {} },
+    },
   },
   { timestamps: true }
 );

@@ -53,7 +53,7 @@ ChartJS.register(
 );
 
 const glass =
-  "rounded-2xl p-5 backdrop-blur-md bg-white/5 border border-white/10 shadow-xl ring-1 ring-white/5";
+  "rounded-2xl p-5 backdrop-blur-md bg-[var(--widget-bg)] border border-[var(--widget-border)] shadow-xl ring-1 ring-[var(--widget-ring)]";
 
 const currency = new Intl.NumberFormat(undefined, {
   style: "currency",
@@ -345,6 +345,13 @@ export default function IncomeExpenseChartWidget() {
     },
   ].filter(Boolean) as any;
 
+  // Theme-aware chart colors
+  const themeMode = (typeof document !== "undefined" && document.documentElement.dataset.theme) || "glass";
+  const css = typeof window !== "undefined" ? getComputedStyle(document.documentElement) : null;
+  const chartGrid = css?.getPropertyValue("--chart-grid")?.trim() || "rgba(255,255,255,0.08)";
+  const chartTick = css?.getPropertyValue("--chart-tick")?.trim() || "rgba(255,255,255,0.75)";
+  const isLight = themeMode === "light";
+
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
@@ -358,12 +365,12 @@ export default function IncomeExpenseChartWidget() {
       legend: { display: false },
       tooltip: {
         displayColors: false,
-        backgroundColor: "rgba(15, 23, 42, 0.92)",
-        borderColor: "rgba(255,255,255,0.12)",
+        backgroundColor: isLight ? "rgba(255,255,255,0.96)" : "rgba(15, 23, 42, 0.92)",
+        borderColor: isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)",
         borderWidth: 1,
         padding: 10,
-        titleColor: "#fff",
-        bodyColor: "rgba(255,255,255,0.9)",
+        titleColor: isLight ? "#111827" : "#ffffff",
+        bodyColor: isLight ? "rgba(17,24,39,0.85)" : "rgba(255,255,255,0.9)",
         callbacks: {
           title: (items) => String(items?.[0]?.label ?? ""),
           label: (ctx) => `${ctx.dataset.label}: ${currency.format(n(ctx.parsed.y))}`,
@@ -372,15 +379,15 @@ export default function IncomeExpenseChartWidget() {
     },
     scales: {
       x: {
-        ticks: { color: "rgba(255,255,255,0.75)" },
-        grid: { color: "rgba(255,255,255,0.08)" },
+        ticks: { color: chartTick },
+        grid: { color: chartGrid },
       },
       y: {
         ticks: {
-          color: "rgba(255,255,255,0.75)",
+          color: chartTick,
           callback: (v) => currency.format(n(v)),
         },
-        grid: { color: "rgba(255,255,255,0.08)" },
+        grid: { color: chartGrid },
       },
     },
   };
@@ -390,28 +397,28 @@ export default function IncomeExpenseChartWidget() {
   }, [summaryQ.data]);
 
   const textBtn = "text-sm font-medium px-2 py-1 transition-colors";
-  const textActive = "text-white underline underline-offset-4";
+  const textActive = "text-[var(--text-primary)] underline underline-offset-4";
   const textInactive =
-    "text-white/70 hover:text-white hover:underline underline-offset-4";
+    "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline underline-offset-4";
 
   return (
     <div className={glass}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-white">Income vs Expense</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Income vs Expense</h3>
 
           {accountFilterId ? (
-            <div className="text-[11px] text-white/60">
+            <div className="text-[11px] text-[var(--text-muted)]">
               Account:{" "}
-              <span className="text-white">
+              <span className="text-[var(--text-primary)]">
                 {accMap.get(accountFilterId) || "Selected account"}
               </span>
             </div>
           ) : (
-            <div className="text-[11px] text-white/40 mt-0.5">All accounts</div>
+            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">All accounts</div>
           )}
 
-          <div className="text-[11px] text-white/50 mt-0.5">
+          <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
             Range: {formatUTC_MMDDYYYY(isoRange.startISO)} →{" "}
             {formatUTC_MMDDYYYY(isoRange.endExclusiveISO)} (UTC)
           </div>
@@ -462,10 +469,10 @@ export default function IncomeExpenseChartWidget() {
       </div>
 
       <div className="h-[260px]">
-        {summaryQ.isLoading && <p className="text-white/70">Loading…</p>}
-        {summaryQ.isError && <p className="text-rose-300">Failed to load chart.</p>}
+        {summaryQ.isLoading && <p className="text-[var(--text-secondary)]">Loading…</p>}
+        {summaryQ.isError && <p className="text-[var(--negative)]">Failed to load chart.</p>}
         {!summaryQ.isLoading && !summaryQ.isError && (datasets.length === 0 || labels.length === 0 ? (
-          <p className="text-white/70">No data for this range.</p>
+          <p className="text-[var(--text-secondary)]">No data for this range.</p>
         ) : (
           <Line
             data={{ labels, datasets }}
@@ -477,12 +484,12 @@ export default function IncomeExpenseChartWidget() {
  {/* Insights grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-6 text-sm">
         {/* Top Categories */}
-        <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
+        <div className="rounded-xl bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)] border border-[var(--widget-border)] p-3">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="font-semibold text-white">Top Categories</h4>
+            <h4 className="font-semibold text-[var(--text-primary)]">Top Categories</h4>
           </div>
           <div className="space-y-2">
-            {topCatsQ.isLoading && <div className="text-white/60">Loading…</div>}
+            {topCatsQ.isLoading && <div className="text-[var(--text-secondary)]">Loading…</div>}
             {!topCatsQ.isLoading &&
               (topCatsQ.data?.length ? (
                 topCatsQ.data.map((c: any, i: number) => {
@@ -499,18 +506,18 @@ export default function IncomeExpenseChartWidget() {
                   );
                 })
               ) : (
-                <div className="text-white/60">No expenses in this range.</div>
+                <div className="text-[var(--text-secondary)]">No expenses in this range.</div>
               ))}
           </div>
         </div>
 
         {/* Top Merchants */}
-        <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
+        <div className="rounded-xl bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)] border border-[var(--widget-border)] p-3">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="font-semibold text-white">Top Merchants</h4>
+            <h4 className="font-semibold text-[var(--text-primary)]">Top Merchants</h4>
           </div>
           <div className="space-y-2">
-            {topMerchantsQ.isLoading && <div className="text-white/60">Loading…</div>}
+            {topMerchantsQ.isLoading && <div className="text-[var(--text-secondary)]">Loading…</div>}
             {!topMerchantsQ.isLoading &&
               (topMerchantsQ.data?.length ? (
                 topMerchantsQ.data.map((m: any, i: number) => {
@@ -527,41 +534,41 @@ export default function IncomeExpenseChartWidget() {
                   );
                 })
               ) : (
-                <div className="text-white/60">No merchants in this range.</div>
+                <div className="text-[var(--text-secondary)]">No merchants in this range.</div>
               ))}
           </div>
         </div>
 
         {/* Largest Expenses */}
-        <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
-          <h4 className="font-semibold text-white mb-2">Largest Expenses</h4>
+        <div className="rounded-xl bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)] border border-[var(--widget-border)] p-3">
+          <h4 className="font-semibold text-[var(--text-primary)] mb-2">Largest Expenses</h4>
           <div className="space-y-1">
-            {largestQ.isLoading && <div className="text-white/60">Loading…</div>}
+            {largestQ.isLoading && <div className="text-[var(--text-secondary)]">Loading…</div>}
             {!largestQ.isLoading &&
               (largestQ.data?.length ? (
                 largestQ.data.map((t: any) => (
                   <div key={getId(t)} className="flex items-center justify-between">
-                    <span className="text-white/80 truncate">{getDesc(t)}</span>
-                    <span className="text-white/60">{currency.format(n(t?.amount))}</span>
+                    <span className="text-[var(--text-primary)] truncate">{getDesc(t)}</span>
+                    <span className="text-[var(--text-secondary)]">{currency.format(n(t?.amount))}</span>
                   </div>
                 ))
               ) : (
-                <div className="text-white/60">No large expenses in this range.</div>
+                <div className="text-[var(--text-secondary)]">No large expenses in this range.</div>
               ))}
           </div>
         </div>
 
         {/* Burn Rate */}
-        <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 p-3">
-          <h4 className="font-semibold text-white mb-2">Burn Rate</h4>
+        <div className="rounded-xl bg-[var(--btn-bg)] ring-1 ring-[var(--widget-ring)] border border-[var(--widget-border)] p-3">
+          <h4 className="font-semibold text-[var(--text-primary)] mb-2">Burn Rate</h4>
           {burnQ.isLoading ? (
-            <div className="text-white/60">Loading…</div>
+            <div className="text-[var(--text-secondary)]">Loading…</div>
           ) : (
-            <div className="text-2xl font-semibold text-white">
-              {currency.format(getBurnValue(burnQ.data))}<span className="text-white/60 text-base"> /mo</span>
+            <div className="text-2xl font-semibold text-[var(--text-primary)]">
+              {currency.format(getBurnValue(burnQ.data))}<span className="text-[var(--text-secondary)] text-base"> /mo</span>
             </div>
           )}
-          <div className="text-[11px] text-white/50 mt-1">
+          <div className="text-[11px] text-[var(--text-muted)] mt-1">
             Average monthly spend across the selected range.
           </div>
         </div>
@@ -595,8 +602,8 @@ function RowBar({
 
   return (
     <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3">
-      <div className="text-white/60 text-xs w-5 text-right">{rank}</div>
-      <div className="relative h-2 rounded-full bg-white/10 overflow-hidden">
+      <div className="text-[var(--text-muted)] text-xs w-5 text-right">{rank}</div>
+      <div className="relative h-2 rounded-full bg-[var(--btn-bg)] overflow-hidden">
         <div
           className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
           style={{
@@ -605,10 +612,10 @@ function RowBar({
           }}
         />
       </div>
-      <div className="text-white/80 text-sm tabular-nums">
+      <div className="text-[var(--text-primary)] text-sm tabular-nums">
         {currency.format(amount)}
       </div>
-      <div className="col-span-3 -mt-0.5 text-[11px] text-white/70 truncate">
+      <div className="col-span-3 -mt-0.5 text-[11px] text-[var(--text-secondary)] truncate">
         {label}
       </div>
     </div>

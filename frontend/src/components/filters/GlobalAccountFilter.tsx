@@ -143,37 +143,39 @@ export default function GlobalAccountFilter() {
 
   return (
     <div className="inline-flex items-center gap-3">
-      <label className="text-sm font-medium text-white/70">Bank</label>
+      <label className="text-sm font-medium text-[var(--text-secondary)]">Bank</label>
       <select
         value={selectedItemId}
         onChange={onBankChange}
         className="
           px-4 py-2 text-sm sm:text-base font-medium
-          bg-white/10 backdrop-blur-md rounded-lg text-white shadow-md
-          focus:outline-none focus:ring-2 focus:ring-white/30
-          hover:bg-white/20 transition
+          bg-[var(--btn-bg)] backdrop-blur-md rounded-lg text-[var(--text-primary)] shadow-md
+          border border-[var(--widget-border)]
+          focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]
+          hover:bg-[var(--btn-hover)] transition
         "
       >
         {bankOptions.map((o) => (
-          <option key={o.id} value={o.id} className="bg-slate-900 text-white">
+          <option key={o.id} value={o.id} className="bg-[var(--widget-bg)] text-[var(--text-primary)]">
             {o.label}
           </option>
         ))}
       </select>
 
-      <label className="text-sm font-medium text-white/70 ml-3">Account</label>
+      <label className="text-sm font-medium text-[var(--text-secondary)] ml-3">Account</label>
       <select
         value={selectedAccountId}
         onChange={onAccountChange}
         className="
           px-4 py-2 text-sm sm:text-base font-medium
-          bg-white/10 backdrop-blur-md rounded-lg text-white shadow-md
-          focus:outline-none focus:ring-2 focus:ring-white/30
-          hover:bg-white/20 transition
+          bg-[var(--btn-bg)] backdrop-blur-md rounded-lg text-[var(--text-primary)] shadow-md
+          border border-[var(--widget-border)]
+          focus:outline-none focus:ring-2 focus:ring-[var(--widget-ring)]
+          hover:bg-[var(--btn-hover)] transition
         "
       >
         {accountOptions.map((o) => (
-          <option key={o.id} value={o.id} className="bg-slate-900 text-white">
+          <option key={o.id} value={o.id} className="bg-[var(--widget-bg)] text-[var(--text-primary)]">
             {o.label}
           </option>
         ))}

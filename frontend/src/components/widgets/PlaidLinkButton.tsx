@@ -30,19 +30,22 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
     queryFn: () => fetchUserInfo(token!),
   });
 
-  const banksConnected = (userInfo as any)?.banksConnected ?? 0;
-
   const { data: items = [] } = useQuery<PlaidItem[]>({
     queryKey: ["plaid", "items"],
-    enabled: !!token && banksConnected > 0,
+    enabled: !!token,
     queryFn: () => fetchPlaidItems(token!),
     staleTime: 60_000,
   });
 
-  const primaryBankName =
-    items.find((i) => i.isPrimary)?.institutionName ||
-    items[0]?.institutionName ||
-    null;
+  // Use actual items count instead of userInfo.banksConnected
+  const banksConnected = items.length;
+  
+  // Get all bank institution names
+  const bankNames = React.useMemo(() => {
+    return items
+      .map((i) => i.institutionName || i.institutionId || "Unknown Bank")
+      .filter((name, index, self) => self.indexOf(name) === index); // Remove duplicates
+  }, [items]);
 
   // ---------------- Mutations ----------------
   const createLink = useMutation({
@@ -146,9 +149,34 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
 
   return (
     <div className="inline-flex flex-col items-start gap-2">
-      <div className="text-sm text-white/70">
-        {userLoading ? "Checking connection…" : `${banksConnected} bank${banksConnected === 1 ? "" : "s"} connected`}
-        {primaryBankName ? <span className="text-white/90"> • {primaryBankName}</span> : null}
+      <div className="text-sm text-[var(--text-secondary)]">
+        {userLoading ? (
+          "Checking connection…"
+        ) : banksConnected === 0 ? (
+          "No banks connected"
+        ) : (
+          <>
+            <span className="font-medium text-[var(--text-primary)]">
+              {banksConnected} bank{banksConnected === 1 ? "" : "s"} connected
+            </span>
+            {bankNames.length > 0 && (
+              <div className="mt-1 text-xs text-[var(--text-muted)]">
+                {bankNames.length === 1 ? (
+                  bankNames[0]
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {bankNames.map((name, idx) => (
+                      <span key={idx} className="inline-block">
+                        {name}
+                        {idx < bankNames.length - 1 && <span className="mx-1">•</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {banksConnected === 0 ? (
@@ -156,9 +184,10 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
           type="button"
           onClick={connectFirstBank}
           disabled={busy}
-          className="px-5 py-2.5 rounded-xl font-medium text-white transition
-                     backdrop-blur-md border border-white/10
-                     bg-white/10 hover:bg-white/15 disabled:opacity-50"
+          className="px-5 py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
+                     backdrop-blur-md border border-[var(--widget-border)]
+                     bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-50
+                     ring-1 ring-[var(--widget-ring)]"
         >
           {busy ? "Preparing…" : "Connect your first bank"}
         </button>
@@ -167,19 +196,20 @@ export default function PlaidLinkButton({ autoOpen = false }: { autoOpen?: boole
           type="button"
           onClick={addAnotherBank}
           disabled={busy}
-          className="px-5 py-2.5 rounded-xl font-medium text-white transition
-                     backdrop-blur-md border border-white/10
-                     bg-white/10 hover:bg-white/15 disabled:opacity-50"
+          className="px-5 py-2.5 rounded-xl font-medium text-[var(--text-primary)] transition
+                     backdrop-blur-md border border-[var(--widget-border)]
+                     bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-50
+                     ring-1 ring-[var(--widget-ring)]"
         >
           {busy ? "Preparing…" : "Add another bank"}
         </button>
       )}
 
-      {errorMsg && <p className="text-sm text-rose-300">{errorMsg}</p>}
+      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
 
-      {/* Optional: show why the button might feel “dead” */}
+      {/* Optional: show why the button might feel "dead" */}
       {banksConnected === 0 && !busy && linkToken && !ready && (
-        <p className="text-xs text-white/50">Loading Plaid…</p>
+        <p className="text-xs text-[var(--text-muted)]">Loading Plaid…</p>
       )}
     </div>
   );

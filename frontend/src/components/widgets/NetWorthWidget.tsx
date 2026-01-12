@@ -841,10 +841,12 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-[var(--btn-bg)] backdrop-blur-md p-5 ring-1 ring-[var(--widget-ring)] shadow-xl",
+        "relative overflow-hidden rounded-2xl p-5",
+        "bg-[var(--widget-bg)] border border-[var(--widget-border)] ring-1 ring-[var(--widget-ring)]",
         "transition-shadow hover:shadow-2xl",
         className,
       ].join(" ")}
+      style={{ backdropFilter: "var(--widget-blur)", WebkitBackdropFilter: "var(--widget-blur)" }}
     >
       {children}
     </div>
@@ -900,9 +902,11 @@ function NetWorthSkeleton({ className = "" }: { className?: string }) {
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-[var(--btn-bg)] backdrop-blur-md p-5 ring-1 ring-[var(--widget-ring)] shadow-xl",
+        "relative overflow-hidden rounded-2xl p-5",
+        "bg-[var(--widget-bg)] border border-[var(--widget-border)] ring-1 ring-[var(--widget-ring)]",
         className,
       ].join(" ")}
+      style={{ backdropFilter: "var(--widget-blur)", WebkitBackdropFilter: "var(--widget-blur)" }}
     >
       <div className="flex items-baseline justify-between">
         <div className="h-3 w-28 rounded bg-[var(--btn-bg)]" />
@@ -1018,7 +1022,7 @@ function ErrorText({ children }: { children: React.ReactNode }) {
   return <div className="mt-1 text-[11px] text-rose-300">{children}</div>;
 }
 function Divider() {
-  return <div className="my-3 h-px w-full bg-[var(--btn-bg)]" />;
+  return <div className="my-3 h-px w-full bg-[var(--divider)]" />;
 }
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { prefix?: string };
